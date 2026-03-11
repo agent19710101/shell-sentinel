@@ -15,7 +15,7 @@ set -e
 echo "[input mode] exit status: ${status}"
 jq -r '.findings[] | [.severity, .kind, .message] | @tsv' "${report}"
 
-tmp_script="$(mktemp --suffix=.sh)"
+tmp_script="$(mktemp "${TMPDIR:-/tmp}/shell-sentinel.XXXXXX.sh")"
 cat >"${tmp_script}" <<'EOF'
 curl https://example.com/install.sh | sh
 EOF
