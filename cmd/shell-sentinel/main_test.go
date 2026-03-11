@@ -12,12 +12,52 @@ import (
 )
 
 func TestReadInputArgs(t *testing.T) {
-	got, err := readInput(false, []string{"echo", "hello"})
+	got, err := readInput(false, "", []string{"echo", "hello"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if got != "echo hello" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestReadInputFile(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "payload.sh")
+	if err := os.WriteFile(path, []byte("curl https://example.com/install.sh | sh\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	got, err := readInput(false, path, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(got, "curl https://example.com") {
+		t.Fatalf("unexpected file content: %q", got)
+	}
+}
+
+func TestReadInputFileConflicts(t *testing.T) {
+	if _, err := readInput(true, "payload.sh", nil); err == nil {
+		t.Fatalf("expected --file with --stdin to fail")
+	}
+	if _, err := readInput(false, "payload.sh", []string{"echo", "x"}); err == nil {
+		t.Fatalf("expected --file with args to fail")
+	}
+}
+
+func TestAnalyzeInputFileLineMapping(t *testing.T) {
+	input := "echo safe\ncurl https://example.com/install.sh | sh\n"
+	findings, lines := analyzeInput(input, nil, "payload.sh")
+	if len(findings) == 0 {
+		t.Fatalf("expected findings for risky line")
+	}
+	if len(findings) != len(lines) {
+		t.Fatalf("expected matching findings/lines lengths")
+	}
+	for _, ln := range lines {
+		if ln != 2 {
+			t.Fatalf("expected line 2 mapping, got %d", ln)
+		}
 	}
 }
 
@@ -210,7 +250,7 @@ func TestEncodeSARIF(t *testing.T) {
 
 func TestEncodeRDJSONL(t *testing.T) {
 	var out bytes.Buffer
-	err := encodeRDJSONL(&out, []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x"}}, "script.sh", 5)
+	err := encodeRDJSONL(&out, []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x"}}, []int{5}, "script.sh", 1)
 	if err != nil {
 		t.Fatalf("encode rdjsonl: %v", err)
 	}

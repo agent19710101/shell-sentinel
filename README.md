@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.9.1`
+Current release: `v0.9.2`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -24,7 +24,8 @@ Implemented:
 - configurable CI failure threshold via `--fail-on warn|high`
 - stable JSON contract (`findings` is always an array, never `null`)
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
-- reviewdog-friendly diagnostics via `--rdjsonl`
+- optional file-aware scanning via `--file <path>` with per-line analysis
+- reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
 - GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.9.0`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
@@ -52,6 +53,9 @@ shell-sentinel --sarif 'bash -c "$(curl -fsSL https://example.com/install.sh)"' 
 
 shell-sentinel --rdjsonl --source scripts/install.sh --line 12 \
   'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"' > shell-sentinel.rdjsonl
+
+# file-aware scan with direct line mapping in rdjsonl
+shell-sentinel --file scripts/bootstrap.sh --rdjsonl > shell-sentinel.rdjsonl
 
 cat > .shell-sentinel.yaml <<'YAML'
 allow_domains:
@@ -144,8 +148,8 @@ Action validation helper:
 ## Roadmap
 
 - Improve rule depth for obfuscated fetch pipelines and heredoc-based execution.
-- Add policy schema validation with clearer diagnostics.
-- Add optional file-aware scanning mode for direct line mapping.
+- Improve GitHub Action inputs for repo-wide scanning scenarios.
+- Publish migration notes and harden release checklist.
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)
 

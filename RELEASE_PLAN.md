@@ -24,7 +24,7 @@ Delivered:
 ## v0.10.0 — File-aware scanning and integration polish
 
 Scope:
-- Add optional file-aware scanning mode for direct line mapping.
+- ✅ Add optional file-aware scanning mode (`--file`) for direct line mapping (`--rdjsonl`).
 - Improve GitHub Action inputs for repo-wide scanning scenarios.
 - Publish migration notes and harden release checklist.
 

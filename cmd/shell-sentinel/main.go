@@ -75,6 +75,7 @@ func main() {
 	sarifOut := flag.Bool("sarif", false, "print SARIF v2.1.0 report")
 	rdjsonlOut := flag.Bool("rdjsonl", false, "print reviewdog rdjsonl diagnostics")
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
+	inputFile := flag.String("file", "", "read payload from file (line-aware scanning)")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
 	baselinePath := flag.String("baseline", "", "optional baseline file for accepted findings")
@@ -103,7 +104,7 @@ func main() {
 		return
 	}
 
-	input, err := readInput(*fromStdin, flag.Args())
+	input, err := readInput(*fromStdin, *inputFile, flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
@@ -115,7 +116,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	findings := sentinel.AnalyzeWithPolicy(input, policy)
+	findings, findingLines := analyzeInput(input, policy, *inputFile)
 	baseline, err := loadBaseline(*baselinePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -145,7 +146,13 @@ func main() {
 			os.Exit(2)
 		}
 	case *rdjsonlOut:
-		if err := encodeRDJSONL(os.Stdout, findings, *sourcePath, *sourceLine); err != nil {
+		source := strings.TrimSpace(*sourcePath)
+		line := *sourceLine
+		if strings.TrimSpace(*inputFile) != "" {
+			source = *inputFile
+			line = 0
+		}
+		if err := encodeRDJSONL(os.Stdout, findings, findingLines, source, line); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(2)
 		}
@@ -197,7 +204,7 @@ func encodeSARIF(w io.Writer, input string, findings []sentinel.Finding) error {
 	return enc.Encode(sentinel.SARIFReport(input, findings))
 }
 
-func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, source string, line int) error {
+func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, findingLines []int, source string, line int) error {
 	if source == "" {
 		source = "shell-input"
 	}
@@ -205,22 +212,50 @@ func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, source string, line
 		line = 1
 	}
 	enc := json.NewEncoder(w)
-	for _, f := range findings {
+	for i, f := range findings {
+		findingLine := line
+		if i < len(findingLines) && findingLines[i] > 0 {
+			findingLine = findingLines[i]
+		}
 		d := rdjsonlDiagnostic{
 			Message:  f.Message,
 			Severity: rdSeverity(f.Severity),
 		}
 		d.Code.Value = f.Kind
 		d.Location.Path = source
-		d.Location.Range.Start.Line = line
+		d.Location.Range.Start.Line = findingLine
 		d.Location.Range.Start.Column = 1
-		d.Location.Range.End.Line = line
+		d.Location.Range.End.Line = findingLine
 		d.Location.Range.End.Column = 1
 		if err := enc.Encode(d); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func analyzeInput(input string, policy *sentinel.Policy, filePath string) ([]sentinel.Finding, []int) {
+	if strings.TrimSpace(filePath) == "" {
+		findings := sentinel.AnalyzeWithPolicy(input, policy)
+		lines := make([]int, len(findings))
+		for i := range lines {
+			lines[i] = 1
+		}
+		return findings, lines
+	}
+
+	var (
+		findings []sentinel.Finding
+		lines    []int
+	)
+	for i, line := range strings.Split(input, "\n") {
+		lineFindings := sentinel.AnalyzeWithPolicy(line, policy)
+		for _, f := range lineFindings {
+			findings = append(findings, f)
+			lines = append(lines, i+1)
+		}
+	}
+	return findings, lines
 }
 
 func rdSeverity(sev sentinel.Severity) string {
@@ -287,7 +322,23 @@ func baselineEntryExpired(entry baselineEntry, now time.Time) bool {
 	return !t.After(now)
 }
 
-func readInput(fromStdin bool, args []string) (string, error) {
+func readInput(fromStdin bool, filePath string, args []string) (string, error) {
+	if strings.TrimSpace(filePath) != "" {
+		if fromStdin {
+			return "", fmt.Errorf("--file cannot be used with --stdin")
+		}
+		if len(args) > 0 {
+			return "", fmt.Errorf("--file cannot be used with positional input")
+		}
+		b, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("read file %q: %w", filePath, err)
+		}
+		if strings.TrimSpace(string(b)) == "" {
+			return "", fmt.Errorf("file input is empty")
+		}
+		return string(b), nil
+	}
 	if fromStdin {
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
@@ -299,7 +350,7 @@ func readInput(fromStdin bool, args []string) (string, error) {
 		return string(b), nil
 	}
 	if len(args) == 0 {
-		return "", fmt.Errorf("no input provided; pass text arg or --stdin")
+		return "", fmt.Errorf("no input provided; pass text arg, --stdin, or --file")
 	}
 	return strings.Join(args, " "), nil
 }
