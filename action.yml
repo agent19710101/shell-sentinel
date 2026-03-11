@@ -40,9 +40,9 @@ inputs:
     required: false
     default: "1"
   version:
-    description: "Version to install (e.g. v0.10.0 or latest)"
+    description: "Version to install (pin to a release tag, e.g. v0.13.0)"
     required: false
-    default: "latest"
+    default: "v0.13.0"
 outputs:
   report:
     description: "JSON scan report"

@@ -19,6 +19,28 @@ const (
 	SeverityHigh Severity = "high"
 )
 
+const (
+	KindANSIEscape                   = "ansi-escape"
+	KindNonASCIIDomain               = "non-ascii-domain"
+	KindPipeToShell                  = "pipe-to-shell"
+	KindDecodedPipeToShell           = "decoded-pipe-to-shell"
+	KindCompressedDecodedPipeToShell = "compressed-decoded-pipe-to-shell"
+	KindFetchInCommandSubstitution   = "fetch-in-command-substitution"
+	KindHeredocShellExec             = "heredoc-shell-exec"
+	KindMixedScript                  = "mixed-script"
+)
+
+var knownKinds = []string{
+	KindANSIEscape,
+	KindNonASCIIDomain,
+	KindPipeToShell,
+	KindDecodedPipeToShell,
+	KindCompressedDecodedPipeToShell,
+	KindFetchInCommandSubstitution,
+	KindHeredocShellExec,
+	KindMixedScript,
+}
+
 type Finding struct {
 	Kind       string   `json:"kind"`
 	Severity   Severity `json:"severity"`
@@ -34,6 +56,7 @@ type Policy struct {
 
 var shellExecFetchPattern = regexp.MustCompile(`(?i)\b(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*|exec\s+)*(?:sh|bash|zsh|dash|ksh)\b\s+-[lc]+\s+["']?[^"']*(?:\$\([^)]*\b(?:curl|wget)\b[^)]*\)|` + "`[^`]*\\b(?:curl|wget)\\b[^`]*`" + `)[^"']*["']?`)
 var heredocShellExecPattern = regexp.MustCompile(`(?is)\b(?:sh|bash|zsh|dash|ksh)\b[^\n]*<<-?\s*['"]?[A-Za-z_][A-Za-z0-9_]*['"]?`)
+var ansiEscapePattern = regexp.MustCompile("\\x1b(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\x1b\\x07]*(?:\\x07|\\x1b\\\\)|[@-Z\\\\-_])")
 
 func Analyze(input string) []Finding {
 	return AnalyzeWithPolicy(input, nil)
@@ -43,7 +66,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 	var findings []Finding
 	if hasANSIEscape(input) {
 		findings = append(findings, Finding{
-			Kind:       "ansi-escape",
+			Kind:       KindANSIEscape,
 			Severity:   SeverityWarn,
 			Message:    "ANSI escape sequence detected; output may hide or rewrite visible text",
 			Suggestion: "Strip control characters before execution",
@@ -58,7 +81,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 
 	if looksLikePipeToShell(input) {
 		findings = append(findings, Finding{
-			Kind:       "pipe-to-shell",
+			Kind:       KindPipeToShell,
 			Severity:   SeverityHigh,
 			Message:    "Remote content piped directly into shell interpreter",
 			Evidence:   compact(input),
@@ -68,7 +91,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 
 	if looksLikeDecodedPipeToShell(input) {
 		findings = append(findings, Finding{
-			Kind:       "decoded-pipe-to-shell",
+			Kind:       KindDecodedPipeToShell,
 			Severity:   SeverityHigh,
 			Message:    "Decoded payload piped into shell interpreter",
 			Evidence:   compact(input),
@@ -78,7 +101,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 
 	if looksLikeCompressedDecodePipeToShell(input) {
 		findings = append(findings, Finding{
-			Kind:       "compressed-decoded-pipe-to-shell",
+			Kind:       KindCompressedDecodedPipeToShell,
 			Severity:   SeverityHigh,
 			Message:    "Compressed payload decoded and piped into shell interpreter",
 			Evidence:   compact(input),
@@ -88,7 +111,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 
 	if looksLikeFetchInCommandSubstitution(input) {
 		findings = append(findings, Finding{
-			Kind:       "fetch-in-command-substitution",
+			Kind:       KindFetchInCommandSubstitution,
 			Severity:   SeverityHigh,
 			Message:    "Remote content executed via command substitution",
 			Evidence:   compact(input),
@@ -98,7 +121,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 
 	if hasSuspiciousUnicode(input) {
 		findings = append(findings, Finding{
-			Kind:       "mixed-script",
+			Kind:       KindMixedScript,
 			Severity:   SeverityWarn,
 			Message:    "Mixed-script text detected (possible homograph trick)",
 			Suggestion: "Verify domains/identifiers are ASCII or expected script",
@@ -107,7 +130,7 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 
 	if looksLikeHeredocShellExec(input) {
 		findings = append(findings, Finding{
-			Kind:       "heredoc-shell-exec",
+			Kind:       KindHeredocShellExec,
 			Severity:   SeverityHigh,
 			Message:    "Heredoc content appears to execute remote-fetched script",
 			Evidence:   compact(input),
@@ -133,7 +156,7 @@ func HighestSeverity(findings []Finding) Severity {
 	return level
 }
 
-func hasANSIEscape(s string) bool { return strings.Contains(s, "\x1b[") }
+func hasANSIEscape(s string) bool { return ansiEscapePattern.MatchString(s) }
 
 func inspectURL(token string, policy *Policy) (Finding, bool) {
 	u, err := url.Parse(token)
@@ -153,7 +176,7 @@ func inspectURL(token string, policy *Policy) (Finding, bool) {
 			}
 			score := confusableScore(host)
 			return Finding{
-				Kind:       "non-ascii-domain",
+				Kind:       KindNonASCIIDomain,
 				Severity:   SeverityHigh,
 				Message:    fmt.Sprintf("URL host contains non-ASCII characters (punycode: %s, confusable-score: %d/100)", asciiHost, score),
 				Evidence:   host,
@@ -165,7 +188,7 @@ func inspectURL(token string, policy *Policy) (Finding, bool) {
 }
 
 func looksLikePipeToShell(s string) bool {
-	l := strings.ToLower(s)
+	l := normalizedShellText(s)
 	if !strings.Contains(l, "|") {
 		return false
 	}
@@ -178,7 +201,7 @@ func looksLikeFetchInCommandSubstitution(s string) bool {
 }
 
 func looksLikeDecodedPipeToShell(s string) bool {
-	l := strings.ToLower(s)
+	l := normalizedShellText(s)
 	if !(strings.Contains(l, "base64 -d") || strings.Contains(l, "base64 --decode") || strings.Contains(l, "openssl base64 -d")) {
 		return false
 	}
@@ -186,7 +209,7 @@ func looksLikeDecodedPipeToShell(s string) bool {
 }
 
 func looksLikeCompressedDecodePipeToShell(s string) bool {
-	l := strings.ToLower(s)
+	l := normalizedShellText(s)
 	hasCompressedDecode := strings.Contains(l, "gzip -d") || strings.Contains(l, "gunzip") ||
 		strings.Contains(l, "xz -d") || strings.Contains(l, "unxz")
 	if !hasCompressedDecode {
@@ -199,7 +222,7 @@ func looksLikeHeredocShellExec(s string) bool {
 	if !heredocShellExecPattern.MatchString(s) {
 		return false
 	}
-	l := strings.ToLower(s)
+	l := normalizedShellText(s)
 	if !(strings.Contains(l, "curl") || strings.Contains(l, "wget")) {
 		return false
 	}
@@ -234,6 +257,10 @@ func compact(s string) string {
 		return s[:120] + "..."
 	}
 	return s
+}
+
+func normalizedShellText(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
 }
 
 func confusableScore(host string) int {
@@ -274,6 +301,21 @@ func isAllowedDomain(host string, policy *Policy) bool {
 			continue
 		}
 		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
+}
+
+func KnownKinds() []string {
+	out := make([]string, len(knownKinds))
+	copy(out, knownKinds)
+	return out
+}
+
+func IsKnownKind(kind string) bool {
+	for _, k := range knownKinds {
+		if kind == k {
 			return true
 		}
 	}

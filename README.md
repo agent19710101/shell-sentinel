@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.12.1`
+Current release: `v0.13.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -26,7 +26,8 @@ Implemented:
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.12.1`
+- shellcheck-compatible diagnostics via `--shellcheck` for legacy lint pipeline interoperability
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.13.0`
 - optional parser-backed file scanning via `--parser shell` for statement-aware line mapping and precision
 - improved parser control-flow coverage for functions/loops/conditionals with line-level fallback mapping
 - optional team policy presets via `--policy-profile strict|balanced|legacy`
@@ -44,7 +45,7 @@ Implemented:
 ## Install
 
 ```bash
-go install github.com/agent19710101/shell-sentinel@latest
+go install github.com/agent19710101/shell-sentinel@v0.13.0
 ```
 
 ## Examples
@@ -62,6 +63,9 @@ shell-sentinel --sarif 'bash -c "$(curl -fsSL https://example.com/install.sh)"' 
 
 shell-sentinel --rdjsonl --source scripts/install.sh --line 12 \
   'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"' > shell-sentinel.rdjsonl
+
+# shellcheck-compatible diagnostics output
+shell-sentinel --file scripts/bootstrap.sh --shellcheck
 
 # file-aware scan with direct line mapping in rdjsonl
 shell-sentinel --file scripts/bootstrap.sh --rdjsonl > shell-sentinel.rdjsonl
@@ -129,7 +133,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.12.1
+      - uses: agent19710101/shell-sentinel@v0.13.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -139,7 +143,7 @@ jobs:
 Repo-wide GitHub Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.12.1
+      - uses: agent19710101/shell-sentinel@v0.13.0
         with:
           files: |
             scripts/*.sh
@@ -150,7 +154,7 @@ Repo-wide GitHub Action example:
 Single-file Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.12.1
+      - uses: agent19710101/shell-sentinel@v0.13.0
         with:
           file: scripts/bootstrap.sh
           fail-on: warn
@@ -161,7 +165,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.12.1
+        uses: agent19710101/shell-sentinel@v0.13.0
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -185,7 +189,7 @@ Action validation helper:
 
 ## Roadmap
 
-- v0.13.1: Add shellcheck-compatible output mode for lint pipeline interoperability.
+- v0.13.0: Shellcheck output + detection/registry/action reproducibility hardening shipped.
 - v0.14.0: Add parser diagnostics debug view to explain matching context in CI logs.
 - v0.15.0: Add confidence metadata per finding for gradual enforcement workflows.
 

@@ -168,6 +168,30 @@ func TestAnalyzeSkipsSafeHeredoc(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDetectsANSIOSCSequences(t *testing.T) {
+	in := "echo '\x1b]8;;https://evil.example\x07click\x1b]8;;\x07'"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == KindANSIEscape {
+			return
+		}
+	}
+	t.Fatalf("expected ansi-escape finding")
+}
+
+func TestKnownKindsRegistry(t *testing.T) {
+	kinds := KnownKinds()
+	if len(kinds) == 0 {
+		t.Fatalf("expected known kinds")
+	}
+	if !IsKnownKind(KindPipeToShell) {
+		t.Fatalf("expected pipe-to-shell to be known")
+	}
+	if IsKnownKind("nope") {
+		t.Fatalf("unexpected unknown kind accepted")
+	}
+}
+
 func TestAnalyzeNoFindings(t *testing.T) {
 	in := "go test ./..."
 	findings := Analyze(in)

@@ -75,6 +75,7 @@ func main() {
 	jsonOut := flag.Bool("json", false, "print JSON report")
 	sarifOut := flag.Bool("sarif", false, "print SARIF v2.1.0 report")
 	rdjsonlOut := flag.Bool("rdjsonl", false, "print reviewdog rdjsonl diagnostics")
+	shellcheckOut := flag.Bool("shellcheck", false, "print shellcheck-compatible diagnostics")
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	inputFile := flag.String("file", "", "read payload from file (line-aware scanning)")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
@@ -93,8 +94,8 @@ func main() {
 	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh, fish)")
 	flag.Parse()
 
-	if outputModeCount(*jsonOut, *sarifOut, *rdjsonlOut) > 1 {
-		fmt.Fprintln(os.Stderr, "error: only one of --json, --sarif, --rdjsonl can be set")
+	if outputModeCount(*jsonOut, *sarifOut, *rdjsonlOut, *shellcheckOut) > 1 {
+		fmt.Fprintln(os.Stderr, "error: only one of --json, --sarif, --rdjsonl, --shellcheck can be set")
 		os.Exit(2)
 	}
 
@@ -184,6 +185,17 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(2)
 		}
+	case *shellcheckOut:
+		source := strings.TrimSpace(*sourcePath)
+		line := *sourceLine
+		if strings.TrimSpace(*inputFile) != "" {
+			source = *inputFile
+			line = 0
+		}
+		if err := encodeShellcheck(os.Stdout, findings, findingLines, source, line); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
 	default:
 		printHuman(r)
 	}
@@ -198,7 +210,7 @@ func main() {
 	}
 }
 
-func outputModeCount(jsonOut, sarifOut, rdjsonlOut bool) int {
+func outputModeCount(jsonOut, sarifOut, rdjsonlOut, shellcheckOut bool) int {
 	count := 0
 	if jsonOut {
 		count++
@@ -207,6 +219,9 @@ func outputModeCount(jsonOut, sarifOut, rdjsonlOut bool) int {
 		count++
 	}
 	if rdjsonlOut {
+		count++
+	}
+	if shellcheckOut {
 		count++
 	}
 	return count
@@ -257,6 +272,29 @@ func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, findingLines []int,
 	return nil
 }
 
+func encodeShellcheck(w io.Writer, findings []sentinel.Finding, findingLines []int, source string, line int) error {
+	if source == "" {
+		source = "shell-input"
+	}
+	if line < 1 {
+		line = 1
+	}
+	for i, f := range findings {
+		findingLine := line
+		if i < len(findingLines) && findingLines[i] > 0 {
+			findingLine = findingLines[i]
+		}
+		msg := f.Message
+		if f.Evidence != "" {
+			msg = fmt.Sprintf("%s (evidence: %s)", f.Message, f.Evidence)
+		}
+		if _, err := fmt.Fprintf(w, "%s:%d:%d: %s: %s [%s]\n", source, findingLine, 1, shellcheckSeverity(f.Severity), msg, f.Kind); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func analyzeInput(input string, policy *sentinel.Policy, filePath, parserMode string) ([]sentinel.Finding, []int) {
 	if strings.TrimSpace(filePath) == "" {
 		findings := sentinel.AnalyzeWithPolicy(input, policy)
@@ -288,7 +326,7 @@ func analyzeInput(input string, policy *sentinel.Policy, filePath, parserMode st
 	}
 
 	for i := 0; i < len(fileLines); i++ {
-		for span := 2; span <= 3; span++ {
+		for span := 2; span <= 6; span++ {
 			if i+span > len(fileLines) {
 				continue
 			}
@@ -297,7 +335,11 @@ func analyzeInput(input string, policy *sentinel.Policy, filePath, parserMode st
 				continue
 			}
 			for _, f := range sentinel.AnalyzeWithPolicy(window, policy) {
-				if f.Kind != "fetch-in-command-substitution" && f.Kind != "pipe-to-shell" && f.Kind != "heredoc-shell-exec" {
+				if f.Kind != sentinel.KindFetchInCommandSubstitution &&
+					f.Kind != sentinel.KindPipeToShell &&
+					f.Kind != sentinel.KindHeredocShellExec &&
+					f.Kind != sentinel.KindDecodedPipeToShell &&
+					f.Kind != sentinel.KindCompressedDecodedPipeToShell {
 					continue
 				}
 				add(i+1, []sentinel.Finding{f})
@@ -385,6 +427,17 @@ func rdSeverity(sev sentinel.Severity) string {
 		return "WARNING"
 	default:
 		return "INFO"
+	}
+}
+
+func shellcheckSeverity(sev sentinel.Severity) string {
+	switch sev {
+	case sentinel.SeverityHigh:
+		return "error"
+	case sentinel.SeverityWarn:
+		return "warning"
+	default:
+		return "info"
 	}
 }
 
@@ -522,7 +575,7 @@ func applyPolicyProfile(policy *sentinel.Policy, profile string) (*sentinel.Poli
 	case "balanced":
 		// keep configured policy as-is
 	case "legacy":
-		clone.IgnoreKinds = append(clone.IgnoreKinds, "decoded-pipe-to-shell", "compressed-decoded-pipe-to-shell")
+		clone.IgnoreKinds = append(clone.IgnoreKinds, sentinel.KindDecodedPipeToShell, sentinel.KindCompressedDecodedPipeToShell)
 	default:
 		return nil, fmt.Errorf("invalid --policy-profile value %q (supported: strict, balanced, legacy)", profile)
 	}
@@ -533,29 +586,19 @@ func applyPolicyProfile(policy *sentinel.Policy, profile string) (*sentinel.Poli
 }
 
 func validatePolicy(policy sentinel.Policy) error {
-	allowedKinds := map[string]struct{}{
-		"ansi-escape":                      {},
-		"non-ascii-domain":                 {},
-		"pipe-to-shell":                    {},
-		"decoded-pipe-to-shell":            {},
-		"compressed-decoded-pipe-to-shell": {},
-		"fetch-in-command-substitution":    {},
-		"heredoc-shell-exec":               {},
-		"mixed-script":                     {},
-	}
 	invalidKinds := make([]string, 0)
 	for _, k := range policy.IgnoreKinds {
 		kind := strings.TrimSpace(k)
 		if kind == "" {
 			continue
 		}
-		if _, ok := allowedKinds[kind]; !ok {
+		if !sentinel.IsKnownKind(kind) {
 			invalidKinds = append(invalidKinds, kind)
 		}
 	}
 	if len(invalidKinds) > 0 {
 		sort.Strings(invalidKinds)
-		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, decoded-pipe-to-shell, compressed-decoded-pipe-to-shell, fetch-in-command-substitution, heredoc-shell-exec, mixed-script)", strings.Join(invalidKinds, ", "))
+		return fmt.Errorf("invalid ignore_kinds values: %s (supported: %s)", strings.Join(invalidKinds, ", "), strings.Join(sentinel.KnownKinds(), ", "))
 	}
 	return nil
 }
