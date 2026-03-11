@@ -266,11 +266,11 @@ func analyzeInput(input string, policy *sentinel.Policy, filePath string) ([]sen
 				continue
 			}
 			window := strings.Join(fileLines[i:i+span], "\n")
-			if !strings.Contains(window, "$(\n") && !strings.Contains(window, "`\n") && !strings.Contains(window, "|\n") && !strings.Contains(window, "\n|") {
+			if !strings.Contains(window, "$(\n") && !strings.Contains(window, "`\n") && !strings.Contains(window, "|\n") && !strings.Contains(window, "\n|") && !strings.Contains(window, "<<") {
 				continue
 			}
 			for _, f := range sentinel.AnalyzeWithPolicy(window, policy) {
-				if f.Kind != "fetch-in-command-substitution" && f.Kind != "pipe-to-shell" {
+				if f.Kind != "fetch-in-command-substitution" && f.Kind != "pipe-to-shell" && f.Kind != "heredoc-shell-exec" {
 					continue
 				}
 				add(i+1, []sentinel.Finding{f})
@@ -427,6 +427,7 @@ func validatePolicy(policy sentinel.Policy) error {
 		"non-ascii-domain":              {},
 		"pipe-to-shell":                 {},
 		"fetch-in-command-substitution": {},
+		"heredoc-shell-exec":            {},
 		"mixed-script":                  {},
 	}
 	invalidKinds := make([]string, 0)
@@ -441,7 +442,7 @@ func validatePolicy(policy sentinel.Policy) error {
 	}
 	if len(invalidKinds) > 0 {
 		sort.Strings(invalidKinds)
-		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, fetch-in-command-substitution, mixed-script)", strings.Join(invalidKinds, ", "))
+		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, fetch-in-command-substitution, heredoc-shell-exec, mixed-script)", strings.Join(invalidKinds, ", "))
 	}
 	return nil
 }

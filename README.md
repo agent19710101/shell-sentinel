@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.10.0`
+Current release: `v0.10.2`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -26,9 +26,10 @@ Implemented:
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.10.0`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.10.2`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
+- heredoc shell-execution detection for remote-fetch payloads
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
 - ANSI escape sequence detection
 - mixed-script warning (Latin + non-Latin)
@@ -111,7 +112,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.10.0
+      - uses: agent19710101/shell-sentinel@v0.10.2
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -121,7 +122,7 @@ jobs:
 Repo-wide GitHub Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.10.0
+      - uses: agent19710101/shell-sentinel@v0.10.2
         with:
           files: |
             scripts/*.sh
@@ -132,7 +133,7 @@ Repo-wide GitHub Action example:
 Single-file Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.10.0
+      - uses: agent19710101/shell-sentinel@v0.10.2
         with:
           file: scripts/bootstrap.sh
           fail-on: warn
@@ -143,7 +144,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.10.0
+        uses: agent19710101/shell-sentinel@v0.10.2
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -167,7 +168,7 @@ Action validation helper:
 
 ## Roadmap
 
-- Improve rule depth for obfuscated fetch pipelines and heredoc-based execution.
+- Improve rule depth for obfuscated fetch pipelines (encoded/indirect fetch chains).
 - Improve GitHub Action inputs for repo-wide scanning scenarios.
 - Publish migration notes and harden release checklist.
 

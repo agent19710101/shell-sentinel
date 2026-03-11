@@ -33,6 +33,7 @@ type Policy struct {
 }
 
 var shellExecFetchPattern = regexp.MustCompile(`(?i)\b(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*|exec\s+)*(?:sh|bash|zsh|dash|ksh)\b\s+-[lc]+\s+["']?[^"']*(?:\$\([^)]*\b(?:curl|wget)\b[^)]*\)|` + "`[^`]*\\b(?:curl|wget)\\b[^`]*`" + `)[^"']*["']?`)
+var heredocShellExecPattern = regexp.MustCompile(`(?is)\b(?:sh|bash|zsh|dash|ksh)\b[^\n]*<<-?\s*['"]?[A-Za-z_][A-Za-z0-9_]*['"]?`)
 
 func Analyze(input string) []Finding {
 	return AnalyzeWithPolicy(input, nil)
@@ -81,6 +82,16 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 			Severity:   SeverityWarn,
 			Message:    "Mixed-script text detected (possible homograph trick)",
 			Suggestion: "Verify domains/identifiers are ASCII or expected script",
+		})
+	}
+
+	if looksLikeHeredocShellExec(input) {
+		findings = append(findings, Finding{
+			Kind:       "heredoc-shell-exec",
+			Severity:   SeverityHigh,
+			Message:    "Heredoc content appears to execute remote-fetched script",
+			Evidence:   compact(input),
+			Suggestion: "Avoid executing heredoc content that fetches remote scripts; save and review first",
 		})
 	}
 
@@ -144,6 +155,19 @@ func looksLikePipeToShell(s string) bool {
 
 func looksLikeFetchInCommandSubstitution(s string) bool {
 	return shellExecFetchPattern.MatchString(s)
+}
+
+func looksLikeHeredocShellExec(s string) bool {
+	if !heredocShellExecPattern.MatchString(s) {
+		return false
+	}
+	l := strings.ToLower(s)
+	if !(strings.Contains(l, "curl") || strings.Contains(l, "wget")) {
+		return false
+	}
+	return strings.Contains(l, "| sh") || strings.Contains(l, "| bash") || strings.Contains(l, "| zsh") ||
+		strings.Contains(l, "$(curl") || strings.Contains(l, "$(wget") ||
+		strings.Contains(l, "`curl") || strings.Contains(l, "`wget")
 }
 
 func hasSuspiciousUnicode(s string) bool {

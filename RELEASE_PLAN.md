@@ -30,3 +30,12 @@ Exit criteria:
 - ✅ CI integration guide covers at least 2 common workflows.
 - ✅ Action behavior verified end-to-end in CI via `scripts/validate-action.sh` and action docs/examples.
 - ✅ Release checklist is documented and repeatable.
+
+## v0.10.x follow-up hardening (in progress)
+
+Delivered:
+- ✅ Added multiline file-mode detection for split fetch execution patterns and improved action diagnostics (`v0.10.1`).
+- ✅ Added heredoc shell-execution detection for remote fetch payloads with file-mode line mapping (`v0.10.2`).
+
+Next:
+- Expand obfuscated fetch-pipeline coverage (encoded/indirect chain variants).
