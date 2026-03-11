@@ -56,8 +56,18 @@ func TestRenderHookBash(t *testing.T) {
 	}
 }
 
+func TestRenderHookZsh(t *testing.T) {
+	hook, err := renderHook("zsh")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if hook == "" {
+		t.Fatalf("expected non-empty hook")
+	}
+}
+
 func TestRenderHookUnsupported(t *testing.T) {
-	if _, err := renderHook("zsh"); err == nil {
+	if _, err := renderHook("fish"); err == nil {
 		t.Fatalf("expected error for unsupported hook shell")
 	}
 }

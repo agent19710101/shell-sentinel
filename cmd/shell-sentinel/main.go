@@ -24,7 +24,7 @@ func main() {
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
-	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash)")
+	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh)")
 	flag.Parse()
 
 	if *hookShell != "" {
@@ -134,7 +134,22 @@ __shell_sentinel_preexec() {
   fi
 }
 trap '__shell_sentinel_preexec' DEBUG`, nil
+	case "zsh":
+		return `# shell-sentinel zsh preexec warning hook
+# Usage:
+#   eval "$(shell-sentinel --hook zsh)"
+# Optional:
+#   export SHELL_SENTINEL_ARGS="--policy ~/.shell-sentinel.yaml"
+__shell_sentinel_preexec() {
+  local cmd="$1"
+  [[ -z "$cmd" ]] && return 0
+  if ! shell-sentinel ${SHELL_SENTINEL_ARGS:-} "$cmd" >/dev/null 2>&1; then
+    print -u2 -- "[shell-sentinel] high-risk command detected: $cmd"
+  fi
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec __shell_sentinel_preexec`, nil
 	default:
-		return "", fmt.Errorf("unsupported shell hook %q (supported: bash)", shell)
+		return "", fmt.Errorf("unsupported shell hook %q (supported: bash, zsh)", shell)
 	}
 }
