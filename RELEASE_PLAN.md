@@ -16,19 +16,17 @@ Delivered:
 - Added baseline entry annotations (owner, justification, expiry) for `--update-baseline`.
 - Added expiry-aware baseline filtering (expired entries no longer suppress findings).
 - Added machine-readable summary stats in JSON output (`stats.total/high/warn/info`).
-
-Delivered:
 - Added policy schema validation with clearer error diagnostics (unknown fields + invalid `ignore_kinds`).
 - Updated Action examples/docs for baseline governance defaults.
 
-## v0.10.0 — File-aware scanning and integration polish
+## v0.10.0 — File-aware scanning and integration polish (shipped)
 
-Scope:
-- ✅ Add optional file-aware scanning mode (`--file`) for direct line mapping (`--rdjsonl`).
-- Improve GitHub Action inputs for repo-wide scanning scenarios.
-- Publish migration notes and harden release checklist.
+Delivered:
+- ✅ Added optional file-aware scanning mode (`--file`) for direct line mapping (`--rdjsonl`).
+- ✅ Improved GitHub Action inputs for repo-wide scanning scenarios with explicit modes (`input`, `file`, `files`).
+- ✅ Published migration notes (`MIGRATION.md`) and hardened release checklist (`RELEASE_CHECKLIST.md`).
 
 Exit criteria:
-- CI integration guide covers at least 2 common workflows.
-- Action behavior verified end-to-end in CI.
-- Release checklist is documented and repeatable.
+- ✅ CI integration guide covers at least 2 common workflows.
+- ✅ Action behavior verified end-to-end in CI via `scripts/validate-action.sh` and action docs/examples.
+- ✅ Release checklist is documented and repeatable.

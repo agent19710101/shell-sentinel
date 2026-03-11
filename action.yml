@@ -1,13 +1,19 @@
 name: "shell-sentinel"
-description: "Scan shell snippets for risky patterns (homograph URLs, pipe-to-shell, ANSI injection)."
+description: "Scan shell snippets/files for risky patterns (homograph URLs, pipe-to-shell, ANSI injection)."
 author: "agent19710101"
 branding:
   icon: "shield"
   color: "yellow"
 inputs:
   input:
-    description: "Shell payload text to scan"
-    required: true
+    description: "Shell payload text to scan (mutually exclusive with file/files)"
+    required: false
+  file:
+    description: "Single file path to scan with --file mode (mutually exclusive with input/files)"
+    required: false
+  files:
+    description: "Newline-separated git pathspecs for repo-wide scan (mutually exclusive with input/file)"
+    required: false
   fail-on:
     description: "Fail threshold: warn|high"
     required: false
@@ -19,15 +25,15 @@ inputs:
     description: "Optional baseline file path for accepted findings"
     required: false
   source:
-    description: "Logical source path used by rdjsonl output"
+    description: "Logical source path used by rdjsonl output in input mode"
     required: false
     default: "shell-input"
   line:
-    description: "Source line used by rdjsonl output"
+    description: "Source line used by rdjsonl output in input mode"
     required: false
     default: "1"
   version:
-    description: "Version to install (e.g. v0.9.0 or latest)"
+    description: "Version to install (e.g. v0.10.0 or latest)"
     required: false
     default: "latest"
 outputs:
@@ -44,11 +50,16 @@ runs:
         set -euo pipefail
         go install "github.com/agent19710101/shell-sentinel@${{ inputs.version }}"
 
-    - name: Scan payload
+    - name: Scan payload/file(s)
       id: scan
       shell: bash
       run: |
         set -euo pipefail
+
+        bin_path="$(go env GOPATH)/bin/shell-sentinel"
+        report_file="$(mktemp)"
+        rdjsonl_file="$(mktemp)"
+
         policy_args=()
         if [[ -n "${{ inputs.policy }}" ]]; then
           policy_args+=(--policy "${{ inputs.policy }}")
@@ -59,15 +70,113 @@ runs:
           baseline_args+=(--baseline "${{ inputs.baseline }}")
         fi
 
-        bin_path="$(go env GOPATH)/bin/shell-sentinel"
-        report_file="$(mktemp)"
-        rdjsonl_file="$(mktemp)"
-        set +e
-        "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${report_file}"
-        status=$?
-        set -e
+        mode_count=0
+        [[ -n "${{ inputs.input }}" ]] && mode_count=$((mode_count + 1))
+        [[ -n "${{ inputs.file }}" ]] && mode_count=$((mode_count + 1))
+        [[ -n "${{ inputs.files }}" ]] && mode_count=$((mode_count + 1))
 
-        "${bin_path}" --rdjsonl --source "${{ inputs.source }}" --line "${{ inputs.line }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${rdjsonl_file}"
+        if [[ ${mode_count} -ne 1 ]]; then
+          echo "exactly one of 'input', 'file', or 'files' must be set"
+          exit 2
+        fi
+
+        severity_rank() {
+          case "$1" in
+            high) echo 3 ;;
+            warn) echo 2 ;;
+            info) echo 1 ;;
+            *) echo 0 ;;
+          esac
+        }
+
+        merge_reports() {
+          jq -s '
+            def sev_rank($s): if $s == "high" then 3 elif $s == "warn" then 2 elif $s == "info" then 1 else 0 end;
+            def max_sev($arr):
+              ($arr | map({s: ., r: sev_rank(.)}) | sort_by(.r) | last | .s) // "none";
+            {
+              input: (if length == 1 then .[0].input else "multiple" end),
+              severity: max_sev(map(.severity // "none")),
+              stats: {
+                total: (map(.stats.total // (.findings | length)) | add // 0),
+                high:  (map(.stats.high // ((.findings // []) | map(select(.severity == "high")) | length)) | add // 0),
+                warn:  (map(.stats.warn // ((.findings // []) | map(select(.severity == "warn")) | length)) | add // 0),
+                info:  (map(.stats.info // ((.findings // []) | map(select(.severity == "info")) | length)) | add // 0)
+              },
+              findings: (map(.findings // []) | add)
+            }
+          ' "$@"
+        }
+
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "${tmpdir}"' EXIT
+
+        overall_status=0
+
+        if [[ -n "${{ inputs.input }}" ]]; then
+          set +e
+          "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${report_file}"
+          status=$?
+          set -e
+
+          "${bin_path}" --rdjsonl --source "${{ inputs.source }}" --line "${{ inputs.line }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${rdjsonl_file}"
+          overall_status=${status}
+
+        elif [[ -n "${{ inputs.file }}" ]]; then
+          set +e
+          "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" --file "${{ inputs.file }}" >"${report_file}"
+          status=$?
+          set -e
+
+          "${bin_path}" --rdjsonl "${policy_args[@]}" "${baseline_args[@]}" --file "${{ inputs.file }}" >"${rdjsonl_file}"
+          overall_status=${status}
+
+        else
+          mapfile -t raw_patterns < <(printf '%s\n' "${{ inputs.files }}")
+          patterns=()
+          for p in "${raw_patterns[@]}"; do
+            [[ -z "${p// }" ]] && continue
+            patterns+=("${p}")
+          done
+
+          if [[ ${#patterns[@]} -eq 0 ]]; then
+            echo "'files' input was set but no pathspecs were provided"
+            exit 2
+          fi
+
+          mapfile -t scan_files < <(git ls-files -- "${patterns[@]}" | sort -u)
+          if [[ ${#scan_files[@]} -eq 0 ]]; then
+            echo "no files matched pathspecs: ${patterns[*]}"
+            jq -n '{input:"multiple",severity:"none",stats:{total:0,high:0,warn:0,info:0},findings:[]}' >"${report_file}"
+            : >"${rdjsonl_file}"
+          else
+            reports=()
+            : >"${rdjsonl_file}"
+            for f in "${scan_files[@]}"; do
+              report_part="${tmpdir}/$(echo "${f}" | tr '/ ' '__').json"
+              rd_part="${tmpdir}/$(echo "${f}" | tr '/ ' '__').rdjsonl"
+
+              set +e
+              "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" --file "${f}" >"${report_part}"
+              status=$?
+              set -e
+
+              if [[ ${status} -eq 2 ]]; then
+                cat "${report_part}" || true
+                exit 2
+              fi
+              if [[ ${status} -eq 1 ]]; then
+                overall_status=1
+              fi
+
+              "${bin_path}" --rdjsonl "${policy_args[@]}" "${baseline_args[@]}" --file "${f}" >"${rd_part}"
+              cat "${rd_part}" >>"${rdjsonl_file}"
+              reports+=("${report_part}")
+            done
+
+            merge_reports "${reports[@]}" >"${report_file}"
+          fi
+        fi
 
         {
           echo "report<<EOF"
@@ -82,7 +191,7 @@ runs:
         } >>"$GITHUB_OUTPUT"
 
         # Emit workflow annotations for each finding.
-        while IFS=$'\t' read -r sev kind msg evidence; do
+        while IFS=$'\t' read -r sev kind msg evidence source line; do
           [[ -z "${sev}" ]] && continue
           level="notice"
           case "${sev}" in
@@ -96,15 +205,24 @@ runs:
           text="${text//'%'/'%25'}"
           text="${text//$'\n'/'%0A'}"
           text="${text//$'\r'/'%0D'}"
-          echo "::${level} title=shell-sentinel/${kind}::${text}"
-        done < <(jq -r '.findings[]? | [.severity, .kind, .message, (.evidence // "")] | @tsv' "${report_file}")
 
-        if [[ $status -eq 1 ]]; then
+          if [[ -n "${source}" && "${source}" != "null" ]]; then
+            if [[ -n "${line}" && "${line}" != "null" ]]; then
+              echo "::${level} file=${source},line=${line},title=shell-sentinel/${kind}::${text}"
+            else
+              echo "::${level} file=${source},title=shell-sentinel/${kind}::${text}"
+            fi
+          else
+            echo "::${level} title=shell-sentinel/${kind}::${text}"
+          fi
+        done < <(jq -r '.findings[]? | [.severity, .kind, .message, (.evidence // ""), (.source // ""), (.line // "")] | @tsv' "${report_file}")
+
+        if [[ ${overall_status} -eq 1 ]]; then
           echo "shell-sentinel findings reached fail-on=${{ inputs.fail-on }} threshold."
           exit 1
         fi
 
-        if [[ $status -eq 2 ]]; then
+        if [[ ${overall_status} -eq 2 ]]; then
           echo "shell-sentinel usage/configuration error."
           cat "${report_file}" || true
           exit 2

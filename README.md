@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.9.2`
+Current release: `v0.10.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -26,7 +26,7 @@ Implemented:
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.9.0`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.10.0`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
@@ -111,11 +111,31 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.9.1
+      - uses: agent19710101/shell-sentinel@v0.10.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
           baseline: .shell-sentinel-baseline.json
+```
+
+Repo-wide GitHub Action example:
+
+```yaml
+      - uses: agent19710101/shell-sentinel@v0.10.0
+        with:
+          files: |
+            scripts/*.sh
+            .github/workflows/*.yml
+          fail-on: warn
+```
+
+Single-file Action example:
+
+```yaml
+      - uses: agent19710101/shell-sentinel@v0.10.0
+        with:
+          file: scripts/bootstrap.sh
+          fail-on: warn
 ```
 
 Reviewdog integration example:
@@ -123,7 +143,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.9.1
+        uses: agent19710101/shell-sentinel@v0.10.0
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -151,7 +171,9 @@ Action validation helper:
 - Improve GitHub Action inputs for repo-wide scanning scenarios.
 - Publish migration notes and harden release checklist.
 
-Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)
+Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)  
+Migration notes: [`MIGRATION.md`](./MIGRATION.md)  
+Release checklist: [`RELEASE_CHECKLIST.md`](./RELEASE_CHECKLIST.md)
 
 ## License
 
