@@ -202,7 +202,7 @@ func TestBaselineRoundtripAndApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load baseline: %v", err)
 	}
-	b = mergeBaseline(b, findings)
+	b = mergeBaseline(b, findings, "", "", "")
 	if err := saveBaseline(path, b); err != nil {
 		t.Fatalf("save baseline: %v", err)
 	}
@@ -214,5 +214,61 @@ func TestBaselineRoundtripAndApply(t *testing.T) {
 	filtered := applyBaseline(findings, reloaded)
 	if len(filtered) != 0 {
 		t.Fatalf("expected findings suppressed by baseline, got %d", len(filtered))
+	}
+}
+
+func TestMergeBaselineAnnotations(t *testing.T) {
+	findings := []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x", Evidence: "curl | sh"}}
+	b := mergeBaseline(nil, findings, "sec-team", "accepted for controlled installer", "2099-01-01T00:00:00Z")
+	if len(b.Entries) != 1 {
+		t.Fatalf("expected 1 baseline entry, got %d", len(b.Entries))
+	}
+	if b.Entries[0].Owner != "sec-team" || b.Entries[0].Justification == "" || b.Entries[0].ExpiresAt == "" {
+		t.Fatalf("expected annotation fields to be persisted, got %#v", b.Entries[0])
+	}
+}
+
+func TestApplyBaselineSkipsExpiredEntries(t *testing.T) {
+	f := sentinel.Finding{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x", Evidence: "curl | sh"}
+	b := &baselineFile{Version: 1, Entries: []baselineEntry{{
+		Signature: findingSignature(f),
+		Kind:      f.Kind,
+		Severity:  f.Severity,
+		Message:   f.Message,
+		Evidence:  f.Evidence,
+		ExpiresAt: "2000-01-01T00:00:00Z",
+	}}}
+	filtered := applyBaseline([]sentinel.Finding{f}, b)
+	if len(filtered) != 1 {
+		t.Fatalf("expected expired baseline entry to be ignored")
+	}
+}
+
+func TestValidateBaselineFlags(t *testing.T) {
+	if err := validateBaselineFlags(false, "team", "", ""); err == nil {
+		t.Fatalf("expected annotation flags without update-baseline to fail")
+	}
+	if err := validateBaselineFlags(true, "", "", "not-a-date"); err == nil {
+		t.Fatalf("expected invalid expiry to fail")
+	}
+	if err := validateBaselineFlags(true, "team", "ok", "2099-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEncodeReportJSONIncludesStats(t *testing.T) {
+	var out bytes.Buffer
+	r := report{Input: "x", Severity: sentinel.SeverityHigh, Stats: reportStats{Total: 2, High: 1, Warn: 1}, Findings: []sentinel.Finding{{Kind: "k", Severity: sentinel.SeverityHigh, Message: "m"}}}
+	if err := encodeReportJSON(&out, r); err != nil {
+		t.Fatalf("encode json: %v", err)
+	}
+	var decoded struct {
+		Stats reportStats `json:"stats"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode json: %v", err)
+	}
+	if decoded.Stats.Total != 2 || decoded.Stats.High != 1 || decoded.Stats.Warn != 1 {
+		t.Fatalf("unexpected stats: %#v", decoded.Stats)
 	}
 }

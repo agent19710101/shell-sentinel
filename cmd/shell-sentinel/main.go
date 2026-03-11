@@ -20,7 +20,15 @@ import (
 type report struct {
 	Input    string             `json:"input"`
 	Severity sentinel.Severity  `json:"severity"`
+	Stats    reportStats        `json:"stats"`
 	Findings []sentinel.Finding `json:"findings"`
+}
+
+type reportStats struct {
+	Total int `json:"total"`
+	High  int `json:"high"`
+	Warn  int `json:"warn"`
+	Info  int `json:"info"`
 }
 
 type baselineFile struct {
@@ -30,11 +38,14 @@ type baselineFile struct {
 }
 
 type baselineEntry struct {
-	Signature string            `json:"signature"`
-	Kind      string            `json:"kind"`
-	Severity  sentinel.Severity `json:"severity"`
-	Message   string            `json:"message"`
-	Evidence  string            `json:"evidence,omitempty"`
+	Signature     string            `json:"signature"`
+	Kind          string            `json:"kind"`
+	Severity      sentinel.Severity `json:"severity"`
+	Message       string            `json:"message"`
+	Evidence      string            `json:"evidence,omitempty"`
+	Owner         string            `json:"owner,omitempty"`
+	Justification string            `json:"justification,omitempty"`
+	ExpiresAt     string            `json:"expires_at,omitempty"`
 }
 
 type rdjsonlDiagnostic struct {
@@ -67,6 +78,9 @@ func main() {
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
 	baselinePath := flag.String("baseline", "", "optional baseline file for accepted findings")
 	updateBaseline := flag.Bool("update-baseline", false, "write/merge current findings into baseline file")
+	baselineOwner := flag.String("baseline-owner", "", "owner annotation for newly added baseline entries")
+	baselineJustification := flag.String("baseline-justification", "", "justification annotation for newly added baseline entries")
+	baselineExpiry := flag.String("baseline-expiry", "", "expiry annotation (RFC3339) for newly added baseline entries")
 	sourcePath := flag.String("source", "shell-input", "logical source path for rdjsonl diagnostics")
 	sourceLine := flag.Int("line", 1, "line number for rdjsonl diagnostics")
 	failOn := flag.String("fail-on", "high", "exit non-zero for findings at or above this severity: warn|high")
@@ -106,8 +120,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
+	if err := validateBaselineFlags(*updateBaseline, *baselineOwner, *baselineJustification, *baselineExpiry); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+
 	if *updateBaseline {
-		baseline = mergeBaseline(baseline, findings)
+		baseline = mergeBaseline(baseline, findings, *baselineOwner, *baselineJustification, *baselineExpiry)
 		if err := saveBaseline(*baselinePath, baseline); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(2)
@@ -116,7 +135,7 @@ func main() {
 
 	findings = applyBaseline(findings, baseline)
 	sev := sentinel.HighestSeverity(findings)
-	r := report{Input: input, Severity: sev, Findings: findings}
+	r := report{Input: input, Severity: sev, Stats: summarizeFindings(findings), Findings: findings}
 
 	switch {
 	case *sarifOut:
@@ -225,6 +244,48 @@ func shouldFail(sev sentinel.Severity, failOn string) (bool, error) {
 	}
 }
 
+func summarizeFindings(findings []sentinel.Finding) reportStats {
+	stats := reportStats{Total: len(findings)}
+	for _, f := range findings {
+		switch f.Severity {
+		case sentinel.SeverityHigh:
+			stats.High++
+		case sentinel.SeverityWarn:
+			stats.Warn++
+		default:
+			stats.Info++
+		}
+	}
+	return stats
+}
+
+func validateBaselineFlags(update bool, owner, justification, expiry string) error {
+	if !update {
+		if strings.TrimSpace(owner) != "" || strings.TrimSpace(justification) != "" || strings.TrimSpace(expiry) != "" {
+			return fmt.Errorf("baseline annotation flags require --update-baseline")
+		}
+		return nil
+	}
+	if strings.TrimSpace(expiry) != "" {
+		if _, err := time.Parse(time.RFC3339, strings.TrimSpace(expiry)); err != nil {
+			return fmt.Errorf("invalid --baseline-expiry value %q (expected RFC3339)", expiry)
+		}
+	}
+	return nil
+}
+
+func baselineEntryExpired(entry baselineEntry, now time.Time) bool {
+	exp := strings.TrimSpace(entry.ExpiresAt)
+	if exp == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, exp)
+	if err != nil {
+		return false
+	}
+	return !t.After(now)
+}
+
 func readInput(fromStdin bool, args []string) (string, error) {
 	if fromStdin {
 		b, err := io.ReadAll(os.Stdin)
@@ -281,7 +342,7 @@ func loadBaseline(path string) (*baselineFile, error) {
 	return &baseline, nil
 }
 
-func mergeBaseline(b *baselineFile, findings []sentinel.Finding) *baselineFile {
+func mergeBaseline(b *baselineFile, findings []sentinel.Finding, owner, justification, expiry string) *baselineFile {
 	if b == nil {
 		b = &baselineFile{Version: 1}
 	}
@@ -295,11 +356,14 @@ func mergeBaseline(b *baselineFile, findings []sentinel.Finding) *baselineFile {
 			continue
 		}
 		seen[sig] = baselineEntry{
-			Signature: sig,
-			Kind:      f.Kind,
-			Severity:  f.Severity,
-			Message:   f.Message,
-			Evidence:  f.Evidence,
+			Signature:     sig,
+			Kind:          f.Kind,
+			Severity:      f.Severity,
+			Message:       f.Message,
+			Evidence:      f.Evidence,
+			Owner:         strings.TrimSpace(owner),
+			Justification: strings.TrimSpace(justification),
+			ExpiresAt:     strings.TrimSpace(expiry),
 		}
 	}
 	entries := make([]baselineEntry, 0, len(seen))
@@ -335,6 +399,9 @@ func applyBaseline(findings []sentinel.Finding, baseline *baselineFile) []sentin
 	}
 	accepted := make(map[string]struct{}, len(baseline.Entries))
 	for _, e := range baseline.Entries {
+		if baselineEntryExpired(e, time.Now().UTC()) {
+			continue
+		}
 		accepted[e.Signature] = struct{}{}
 	}
 	out := findings[:0]

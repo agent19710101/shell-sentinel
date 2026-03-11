@@ -10,17 +10,16 @@ Delivered:
 - Added baseline file support for accepted findings (`--baseline`, `--update-baseline`) with deterministic signatures.
 - Added reviewdog formatter output (`--rdjsonl`) and action output wiring.
 
-## v0.9.0 — Baseline governance + policy diagnostics
+## v0.9.0 — Baseline governance + policy diagnostics (in progress)
 
-Scope:
-- Add baseline entry annotations (owner, justification, expiry).
+Delivered:
+- Added baseline entry annotations (owner, justification, expiry) for `--update-baseline`.
+- Added expiry-aware baseline filtering (expired entries no longer suppress findings).
+- Added machine-readable summary stats in JSON output (`stats.total/high/warn/info`).
+
+Remaining:
 - Add policy schema validation with clearer error diagnostics.
-- Add machine-readable summary stats in output for dashboards.
-
-Exit criteria:
-- Baseline workflow supports audit metadata and expiry checks.
-- Policy validation errors are deterministic and tested.
-- Action examples updated for baseline governance.
+- Update Action examples for baseline governance defaults.
 
 ## v0.10.0 — File-aware scanning and integration polish
 

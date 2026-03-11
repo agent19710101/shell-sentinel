@@ -27,7 +27,7 @@ inputs:
     required: false
     default: "1"
   version:
-    description: "Version to install (e.g. v0.8.0 or latest)"
+    description: "Version to install (e.g. v0.9.0 or latest)"
     required: false
     default: "latest"
 outputs:

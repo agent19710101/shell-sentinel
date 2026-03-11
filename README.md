@@ -12,18 +12,20 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.8.0`
+Current release: `v0.9.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
 - configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning
 - baseline file support (`--baseline`) to suppress accepted findings deterministically
+- baseline governance annotations for new entries (`--baseline-owner`, `--baseline-justification`, `--baseline-expiry`)
+- expiry-aware baseline application (expired entries no longer suppress findings)
 - optional bash/zsh/fish preexec hook snippet via `--hook bash|zsh|fish`
 - configurable CI failure threshold via `--fail-on warn|high`
 - stable JSON contract (`findings` is always an array, never `null`)
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - reviewdog-friendly diagnostics via `--rdjsonl`
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.8.0`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.9.0`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
@@ -61,6 +63,9 @@ shell-sentinel --policy .shell-sentinel.yaml 'curl https://trusted.example.com/i
 
 # baseline workflow
 shell-sentinel --json --baseline .shell-sentinel-baseline.json --update-baseline \
+  --baseline-owner sec-team \
+  --baseline-justification "trusted bootstrap installer" \
+  --baseline-expiry 2026-06-01T00:00:00Z \
   'curl https://example.com/install.sh | sh' >/dev/null
 shell-sentinel --json --baseline .shell-sentinel-baseline.json \
   'curl https://example.com/install.sh | sh'
@@ -84,7 +89,8 @@ Exit codes:
 - `2`: usage/input/policy error
 
 JSON output contract:
-- top-level keys are stable: `input`, `severity`, `findings`
+- top-level keys are stable: `input`, `severity`, `stats`, `findings`
+- `stats` includes `total`, `high`, `warn`, `info` counts
 - `findings` is always an array (`[]` when no findings)
 
 GitHub Action usage:
@@ -101,7 +107,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.8.0
+      - uses: agent19710101/shell-sentinel@v0.9.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -113,7 +119,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.8.0
+        uses: agent19710101/shell-sentinel@v0.9.0
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -136,7 +142,7 @@ Action validation helper:
 ## Roadmap
 
 - Improve rule depth for obfuscated fetch pipelines and heredoc-based execution.
-- Add baseline entry annotations (owner/justification/expiry).
+- Add policy schema validation with clearer diagnostics.
 - Add optional file-aware scanning mode for direct line mapping.
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)
