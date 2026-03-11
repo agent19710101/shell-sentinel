@@ -15,13 +15,26 @@ inputs:
   policy:
     description: "Optional .shell-sentinel.yaml path"
     required: false
+  baseline:
+    description: "Optional baseline file path for accepted findings"
+    required: false
+  source:
+    description: "Logical source path used by rdjsonl output"
+    required: false
+    default: "shell-input"
+  line:
+    description: "Source line used by rdjsonl output"
+    required: false
+    default: "1"
   version:
-    description: "Version to install (e.g. v0.7.0 or latest)"
+    description: "Version to install (e.g. v0.8.0 or latest)"
     required: false
     default: "latest"
 outputs:
   report:
     description: "JSON scan report"
+  rdjsonl:
+    description: "reviewdog rdjsonl diagnostics"
 runs:
   using: "composite"
   steps:
@@ -41,16 +54,30 @@ runs:
           policy_args+=(--policy "${{ inputs.policy }}")
         fi
 
+        baseline_args=()
+        if [[ -n "${{ inputs.baseline }}" ]]; then
+          baseline_args+=(--baseline "${{ inputs.baseline }}")
+        fi
+
         bin_path="$(go env GOPATH)/bin/shell-sentinel"
         report_file="$(mktemp)"
+        rdjsonl_file="$(mktemp)"
         set +e
-        "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${{ inputs.input }}" >"${report_file}"
+        "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${report_file}"
         status=$?
         set -e
+
+        "${bin_path}" --rdjsonl --source "${{ inputs.source }}" --line "${{ inputs.line }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${rdjsonl_file}"
 
         {
           echo "report<<EOF"
           cat "${report_file}"
+          echo "EOF"
+        } >>"$GITHUB_OUTPUT"
+
+        {
+          echo "rdjsonl<<EOF"
+          cat "${rdjsonl_file}"
           echo "EOF"
         } >>"$GITHUB_OUTPUT"
 

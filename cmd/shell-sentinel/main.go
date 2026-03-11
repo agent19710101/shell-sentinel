@@ -1,13 +1,17 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/agent19710101/shell-sentinel/pkg/sentinel"
 	"gopkg.in/yaml.v3"
@@ -19,18 +23,58 @@ type report struct {
 	Findings []sentinel.Finding `json:"findings"`
 }
 
+type baselineFile struct {
+	Version     int             `json:"version"`
+	GeneratedAt string          `json:"generated_at"`
+	Entries     []baselineEntry `json:"entries"`
+}
+
+type baselineEntry struct {
+	Signature string            `json:"signature"`
+	Kind      string            `json:"kind"`
+	Severity  sentinel.Severity `json:"severity"`
+	Message   string            `json:"message"`
+	Evidence  string            `json:"evidence,omitempty"`
+}
+
+type rdjsonlDiagnostic struct {
+	Message  string `json:"message"`
+	Severity string `json:"severity"`
+	Code     struct {
+		Value string `json:"value"`
+	} `json:"code"`
+	Location struct {
+		Path  string `json:"path"`
+		Range struct {
+			Start struct {
+				Line   int `json:"line"`
+				Column int `json:"column"`
+			} `json:"start"`
+			End struct {
+				Line   int `json:"line"`
+				Column int `json:"column"`
+			} `json:"end"`
+		} `json:"range"`
+	} `json:"location"`
+}
+
 func main() {
 	jsonOut := flag.Bool("json", false, "print JSON report")
 	sarifOut := flag.Bool("sarif", false, "print SARIF v2.1.0 report")
+	rdjsonlOut := flag.Bool("rdjsonl", false, "print reviewdog rdjsonl diagnostics")
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
+	baselinePath := flag.String("baseline", "", "optional baseline file for accepted findings")
+	updateBaseline := flag.Bool("update-baseline", false, "write/merge current findings into baseline file")
+	sourcePath := flag.String("source", "shell-input", "logical source path for rdjsonl diagnostics")
+	sourceLine := flag.Int("line", 1, "line number for rdjsonl diagnostics")
 	failOn := flag.String("fail-on", "high", "exit non-zero for findings at or above this severity: warn|high")
 	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh, fish)")
 	flag.Parse()
 
-	if *jsonOut && *sarifOut {
-		fmt.Fprintln(os.Stderr, "error: --json and --sarif are mutually exclusive")
+	if outputModeCount(*jsonOut, *sarifOut, *rdjsonlOut) > 1 {
+		fmt.Fprintln(os.Stderr, "error: only one of --json, --sarif, --rdjsonl can be set")
 		os.Exit(2)
 	}
 
@@ -57,12 +101,31 @@ func main() {
 	}
 
 	findings := sentinel.AnalyzeWithPolicy(input, policy)
+	baseline, err := loadBaseline(*baselinePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+	if *updateBaseline {
+		baseline = mergeBaseline(baseline, findings)
+		if err := saveBaseline(*baselinePath, baseline); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+	}
+
+	findings = applyBaseline(findings, baseline)
 	sev := sentinel.HighestSeverity(findings)
 	r := report{Input: input, Severity: sev, Findings: findings}
 
 	switch {
 	case *sarifOut:
 		if err := encodeSARIF(os.Stdout, input, findings); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+	case *rdjsonlOut:
+		if err := encodeRDJSONL(os.Stdout, findings, *sourcePath, *sourceLine); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(2)
 		}
@@ -85,6 +148,20 @@ func main() {
 	}
 }
 
+func outputModeCount(jsonOut, sarifOut, rdjsonlOut bool) int {
+	count := 0
+	if jsonOut {
+		count++
+	}
+	if sarifOut {
+		count++
+	}
+	if rdjsonlOut {
+		count++
+	}
+	return count
+}
+
 func encodeReportJSON(w io.Writer, r report) error {
 	if r.Findings == nil {
 		r.Findings = []sentinel.Finding{}
@@ -98,6 +175,43 @@ func encodeSARIF(w io.Writer, input string, findings []sentinel.Finding) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(sentinel.SARIFReport(input, findings))
+}
+
+func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, source string, line int) error {
+	if source == "" {
+		source = "shell-input"
+	}
+	if line < 1 {
+		line = 1
+	}
+	enc := json.NewEncoder(w)
+	for _, f := range findings {
+		d := rdjsonlDiagnostic{
+			Message:  f.Message,
+			Severity: rdSeverity(f.Severity),
+		}
+		d.Code.Value = f.Kind
+		d.Location.Path = source
+		d.Location.Range.Start.Line = line
+		d.Location.Range.Start.Column = 1
+		d.Location.Range.End.Line = line
+		d.Location.Range.End.Column = 1
+		if err := enc.Encode(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rdSeverity(sev sentinel.Severity) string {
+	switch sev {
+	case sentinel.SeverityHigh:
+		return "ERROR"
+	case sentinel.SeverityWarn:
+		return "WARNING"
+	default:
+		return "INFO"
+	}
 }
 
 func shouldFail(sev sentinel.Severity, failOn string) (bool, error) {
@@ -144,6 +258,98 @@ func loadPolicy(path string, disabled bool) (*sentinel.Policy, error) {
 		return nil, fmt.Errorf("parse policy file %q: %w", path, err)
 	}
 	return &policy, nil
+}
+
+func loadBaseline(path string) (*baselineFile, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return &baselineFile{Version: 1}, nil
+		}
+		return nil, fmt.Errorf("read baseline file %q: %w", path, err)
+	}
+	var baseline baselineFile
+	if err := json.Unmarshal(b, &baseline); err != nil {
+		return nil, fmt.Errorf("parse baseline file %q: %w", path, err)
+	}
+	if baseline.Version == 0 {
+		baseline.Version = 1
+	}
+	return &baseline, nil
+}
+
+func mergeBaseline(b *baselineFile, findings []sentinel.Finding) *baselineFile {
+	if b == nil {
+		b = &baselineFile{Version: 1}
+	}
+	seen := make(map[string]baselineEntry, len(b.Entries))
+	for _, e := range b.Entries {
+		seen[e.Signature] = e
+	}
+	for _, f := range findings {
+		sig := findingSignature(f)
+		if _, ok := seen[sig]; ok {
+			continue
+		}
+		seen[sig] = baselineEntry{
+			Signature: sig,
+			Kind:      f.Kind,
+			Severity:  f.Severity,
+			Message:   f.Message,
+			Evidence:  f.Evidence,
+		}
+	}
+	entries := make([]baselineEntry, 0, len(seen))
+	for _, e := range seen {
+		entries = append(entries, e)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Signature < entries[j].Signature })
+	b.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+	b.Entries = entries
+	return b
+}
+
+func saveBaseline(path string, baseline *baselineFile) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("--update-baseline requires --baseline <path>")
+	}
+	if baseline == nil {
+		baseline = &baselineFile{Version: 1}
+	}
+	out, err := json.MarshalIndent(baseline, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode baseline: %w", err)
+	}
+	if err := os.WriteFile(path, append(out, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write baseline file %q: %w", path, err)
+	}
+	return nil
+}
+
+func applyBaseline(findings []sentinel.Finding, baseline *baselineFile) []sentinel.Finding {
+	if baseline == nil || len(baseline.Entries) == 0 {
+		return findings
+	}
+	accepted := make(map[string]struct{}, len(baseline.Entries))
+	for _, e := range baseline.Entries {
+		accepted[e.Signature] = struct{}{}
+	}
+	out := findings[:0]
+	for _, f := range findings {
+		if _, ok := accepted[findingSignature(f)]; ok {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func findingSignature(f sentinel.Finding) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{f.Kind, string(f.Severity), f.Message, f.Evidence}, "\x1f")))
+	return hex.EncodeToString(sum[:])
 }
 
 func printHuman(r report) {

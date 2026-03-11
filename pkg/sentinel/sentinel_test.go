@@ -34,6 +34,28 @@ func TestAnalyzeDetectsFetchInCommandSubstitution(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDetectsFetchInExecWrapper(t *testing.T) {
+	in := "exec bash -lc \"$(curl -fsSL https://example.com/install.sh)\""
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "fetch-in-command-substitution" {
+			return
+		}
+	}
+	t.Fatalf("expected fetch-in-command-substitution finding")
+}
+
+func TestAnalyzeDetectsFetchWithEnvPrefix(t *testing.T) {
+	in := "env DEBUG=1 bash -c \"`wget -qO- https://example.com/install.sh`\""
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "fetch-in-command-substitution" {
+			return
+		}
+	}
+	t.Fatalf("expected fetch-in-command-substitution finding")
+}
+
 func TestAnalyzeSkipsNonExecutingCommandSubstitution(t *testing.T) {
 	in := "echo \"$(curl -fsSL https://example.com/version.txt)\""
 	findings := Analyze(in)

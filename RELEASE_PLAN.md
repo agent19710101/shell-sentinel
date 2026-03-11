@@ -3,34 +3,29 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## v0.8.0 — Rule tuning + safer defaults
+## v0.8.0 — Rule tuning + baseline + CI formatter (shipped)
+
+Delivered:
+- Expanded fetch-execution detection to cover additional shell forms (`exec`, `env VAR=...`, `-lc`) with constrained matching.
+- Added baseline file support for accepted findings (`--baseline`, `--update-baseline`) with deterministic signatures.
+- Added reviewdog formatter output (`--rdjsonl`) and action output wiring.
+
+## v0.9.0 — Baseline governance + policy diagnostics
 
 Scope:
-- Expand fetch-execution detection to cover additional shell forms with low false positives.
-- Add optional strict mode profile for CI/security pipelines.
-- Improve finding metadata (rule IDs and remediation hints).
-
-Exit criteria:
-- New rule coverage has regression tests for true/false positives.
-- README includes strict profile examples.
-- No JSON/SARIF contract regressions.
-
-## v0.9.0 — Policy ergonomics + baseline workflows
-
-Scope:
-- Add baseline file support (suppress accepted findings with explicit review trail).
+- Add baseline entry annotations (owner, justification, expiry).
 - Add policy schema validation with clearer error diagnostics.
 - Add machine-readable summary stats in output for dashboards.
 
 Exit criteria:
-- Baseline flow documented for local + CI usage.
+- Baseline workflow supports audit metadata and expiry checks.
 - Policy validation errors are deterministic and tested.
-- Action examples updated for baseline-aware checks.
+- Action examples updated for baseline governance.
 
-## v0.10.0 — Integration polish
+## v0.10.0 — File-aware scanning and integration polish
 
 Scope:
-- Add reviewdog/problem-matcher friendly formatter.
+- Add optional file-aware scanning mode for direct line mapping.
 - Improve GitHub Action inputs for repo-wide scanning scenarios.
 - Publish migration notes and harden release checklist.
 

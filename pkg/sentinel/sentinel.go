@@ -32,7 +32,7 @@ type Policy struct {
 	IgnoreKinds  []string `yaml:"ignore_kinds"`
 }
 
-var shellExecFetchPattern = regexp.MustCompile(`(?i)\b(?:sh|bash|zsh)\b\s+-c\s+["']?\s*(?:\$\([^)]*\b(?:curl|wget)\b[^)]*\)|` + "`[^`]*\\b(?:curl|wget)\\b[^`]*`" + `)`)
+var shellExecFetchPattern = regexp.MustCompile(`(?i)\b(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*|exec\s+)*(?:sh|bash|zsh|dash|ksh)\b\s+-[lc]+\s+["']?[^"']*(?:\$\([^)]*\b(?:curl|wget)\b[^)]*\)|` + "`[^`]*\\b(?:curl|wget)\\b[^`]*`" + `)[^"']*["']?`)
 
 func Analyze(input string) []Finding {
 	return AnalyzeWithPolicy(input, nil)

@@ -12,16 +12,19 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.7.0`
+Current release: `v0.8.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
 - configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning
+- baseline file support (`--baseline`) to suppress accepted findings deterministically
 - optional bash/zsh/fish preexec hook snippet via `--hook bash|zsh|fish`
 - configurable CI failure threshold via `--fail-on warn|high`
 - stable JSON contract (`findings` is always an array, never `null`)
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.7.0`
+- reviewdog-friendly diagnostics via `--rdjsonl`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.8.0`
+- expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
 - ANSI escape sequence detection
@@ -45,6 +48,9 @@ shell-sentinel --json --fail-on warn 'bash -c "$(curl -fsSL https://example.com/
 
 shell-sentinel --sarif 'bash -c "$(curl -fsSL https://example.com/install.sh)"' > shell-sentinel.sarif
 
+shell-sentinel --rdjsonl --source scripts/install.sh --line 12 \
+  'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"' > shell-sentinel.rdjsonl
+
 cat > .shell-sentinel.yaml <<'YAML'
 allow_domains:
   - trusted.example.com
@@ -52,6 +58,12 @@ ignore_kinds:
   - mixed-script
 YAML
 shell-sentinel --policy .shell-sentinel.yaml 'curl https://trusted.example.com/install.sh | sh'
+
+# baseline workflow
+shell-sentinel --json --baseline .shell-sentinel-baseline.json --update-baseline \
+  'curl https://example.com/install.sh | sh' >/dev/null
+shell-sentinel --json --baseline .shell-sentinel-baseline.json \
+  'curl https://example.com/install.sh | sh'
 
 # print and enable bash preexec warning hook
 # (add to ~/.bashrc to persist)
@@ -89,10 +101,30 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.7.0
+      - uses: agent19710101/shell-sentinel@v0.8.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
+          baseline: .shell-sentinel-baseline.json
+```
+
+Reviewdog integration example:
+
+```yaml
+      - name: shell-sentinel rdjsonl
+        id: shell
+        uses: agent19710101/shell-sentinel@v0.8.0
+        with:
+          input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
+          source: scripts/install.sh
+          line: 12
+      - uses: reviewdog/action-reviewdog@v2
+        with:
+          reporter: github-pr-review
+          filter_mode: nofilter
+          level: warning
+          fail_on_error: true
+          rdjsonl: ${{ steps.shell.outputs.rdjsonl }}
 ```
 
 Action validation helper:
@@ -103,9 +135,9 @@ Action validation helper:
 
 ## Roadmap
 
-- `v0.8.0`: rule tuning + strict profile for CI/security pipelines.
-- `v0.9.0`: policy ergonomics + baseline workflow support.
-- `v0.10.0`: integration polish for CI/review tooling.
+- Improve rule depth for obfuscated fetch pipelines and heredoc-based execution.
+- Add baseline entry annotations (owner/justification/expiry).
+- Add optional file-aware scanning mode for direct line mapping.
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)
 

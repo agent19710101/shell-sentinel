@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agent19710101/shell-sentinel/pkg/sentinel"
@@ -113,6 +114,12 @@ func TestShouldFailInvalidThreshold(t *testing.T) {
 	}
 }
 
+func TestOutputModeCount(t *testing.T) {
+	if got := outputModeCount(true, false, true); got != 2 {
+		t.Fatalf("expected 2, got %d", got)
+	}
+}
+
 func TestEncodeReportJSONNoFindingsUsesEmptyArray(t *testing.T) {
 	var out bytes.Buffer
 	err := encodeReportJSON(&out, report{Input: "go test ./...", Severity: sentinel.SeverityInfo})
@@ -164,5 +171,48 @@ func TestEncodeSARIF(t *testing.T) {
 	}
 	if decoded.Version != "2.1.0" {
 		t.Fatalf("unexpected sarif version: %s", decoded.Version)
+	}
+}
+
+func TestEncodeRDJSONL(t *testing.T) {
+	var out bytes.Buffer
+	err := encodeRDJSONL(&out, []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x"}}, "script.sh", 5)
+	if err != nil {
+		t.Fatalf("encode rdjsonl: %v", err)
+	}
+	line := strings.TrimSpace(out.String())
+	if line == "" {
+		t.Fatalf("expected output")
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(line), &decoded); err != nil {
+		t.Fatalf("decode rdjsonl: %v", err)
+	}
+	if decoded["severity"] != "ERROR" {
+		t.Fatalf("unexpected severity: %v", decoded["severity"])
+	}
+}
+
+func TestBaselineRoundtripAndApply(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "baseline.json")
+	findings := []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x", Evidence: "curl | sh"}}
+
+	b, err := loadBaseline(path)
+	if err != nil {
+		t.Fatalf("load baseline: %v", err)
+	}
+	b = mergeBaseline(b, findings)
+	if err := saveBaseline(path, b); err != nil {
+		t.Fatalf("save baseline: %v", err)
+	}
+
+	reloaded, err := loadBaseline(path)
+	if err != nil {
+		t.Fatalf("reload baseline: %v", err)
+	}
+	filtered := applyBaseline(findings, reloaded)
+	if len(filtered) != 0 {
+		t.Fatalf("expected findings suppressed by baseline, got %d", len(filtered))
 	}
 }
