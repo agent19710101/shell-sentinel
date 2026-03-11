@@ -36,6 +36,7 @@ Exit criteria:
 Delivered:
 - ✅ Added multiline file-mode detection for split fetch execution patterns and improved action diagnostics (`v0.10.1`).
 - ✅ Added heredoc shell-execution detection for remote fetch payloads with file-mode line mapping (`v0.10.2`).
+- ✅ Added decoded payload pipe-to-shell detection for base64/openssl decode chains (`v0.10.3`).
 
 Next:
-- Expand obfuscated fetch-pipeline coverage (encoded/indirect chain variants).
+- Expand obfuscated fetch-pipeline coverage for additional decoder families beyond base64.

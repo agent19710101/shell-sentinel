@@ -426,6 +426,7 @@ func validatePolicy(policy sentinel.Policy) error {
 		"ansi-escape":                   {},
 		"non-ascii-domain":              {},
 		"pipe-to-shell":                 {},
+		"decoded-pipe-to-shell":         {},
 		"fetch-in-command-substitution": {},
 		"heredoc-shell-exec":            {},
 		"mixed-script":                  {},
@@ -442,7 +443,7 @@ func validatePolicy(policy sentinel.Policy) error {
 	}
 	if len(invalidKinds) > 0 {
 		sort.Strings(invalidKinds)
-		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, fetch-in-command-substitution, heredoc-shell-exec, mixed-script)", strings.Join(invalidKinds, ", "))
+		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, decoded-pipe-to-shell, fetch-in-command-substitution, heredoc-shell-exec, mixed-script)", strings.Join(invalidKinds, ", "))
 	}
 	return nil
 }

@@ -66,6 +66,16 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 		})
 	}
 
+	if looksLikeDecodedPipeToShell(input) {
+		findings = append(findings, Finding{
+			Kind:       "decoded-pipe-to-shell",
+			Severity:   SeverityHigh,
+			Message:    "Decoded payload piped into shell interpreter",
+			Evidence:   compact(input),
+			Suggestion: "Decode to a file and review content before execution",
+		})
+	}
+
 	if looksLikeFetchInCommandSubstitution(input) {
 		findings = append(findings, Finding{
 			Kind:       "fetch-in-command-substitution",
@@ -155,6 +165,14 @@ func looksLikePipeToShell(s string) bool {
 
 func looksLikeFetchInCommandSubstitution(s string) bool {
 	return shellExecFetchPattern.MatchString(s)
+}
+
+func looksLikeDecodedPipeToShell(s string) bool {
+	l := strings.ToLower(s)
+	if !(strings.Contains(l, "base64 -d") || strings.Contains(l, "base64 --decode") || strings.Contains(l, "openssl base64 -d")) {
+		return false
+	}
+	return strings.Contains(l, "| sh") || strings.Contains(l, "| bash") || strings.Contains(l, "| zsh")
 }
 
 func looksLikeHeredocShellExec(s string) bool {

