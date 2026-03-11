@@ -3,7 +3,7 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## Delivered foundation (v0.8.0 → v0.11.0)
+## Delivered foundation (v0.8.0 → v0.12.0)
 
 Shipped:
 - Rule-coverage expansion for shell execution forms and encoded/compressed payload chains.
@@ -12,17 +12,6 @@ Shipped:
 - File-aware scanning plus opt-in parser-backed file scanning (`--parser shell`) for higher precision.
 - Team policy profiles (`strict`, `balanced`, `legacy`) for rollout ergonomics.
 - CI/release hardening and action validation coverage.
-
-## v0.12.0 — Parser control-flow precision
-
-Scope:
-- Extend `--parser shell` analysis to better track control-flow constructs (functions, loops, conditionals) with stable line mapping.
-- Reduce false positives from text-window fallback in complex multiline scripts.
-- Preserve default (`--parser none`) behavior and output compatibility.
-
-Exit criteria:
-- Parser mode enhancements covered by file-mode regression tests.
-- Default mode contract remains unchanged.
 
 ## v0.13.0 — Policy profile migration polish
 
@@ -44,3 +33,13 @@ Scope:
 Exit criteria:
 - Formatter output covered by golden tests.
 - README contains CI usage examples.
+
+## v0.15.0 — Parser diagnostics explainability
+
+Scope:
+- Add optional parser debug output to show matched control-flow context for each finding.
+- Keep default output stable unless debug mode is explicitly enabled.
+
+Exit criteria:
+- Debug output covered by snapshot tests.
+- CI docs include troubleshooting examples.

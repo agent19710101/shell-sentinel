@@ -311,11 +311,15 @@ func analyzeInputWithShellParser(input string, policy *sentinel.Policy) ([]senti
 
 	var findings []sentinel.Finding
 	var lines []int
-	for _, stmt := range file.Stmts {
+	syntax.Walk(file, func(node syntax.Node) bool {
+		stmt, ok := node.(*syntax.Stmt)
+		if !ok || stmt == nil {
+			return true
+		}
 		start := int(stmt.Pos().Offset())
 		end := int(stmt.End().Offset())
 		if start < 0 || end <= start || end > len(input) {
-			continue
+			return true
 		}
 		snippet := input[start:end]
 		stmtFindings := sentinel.AnalyzeWithPolicy(snippet, policy)
@@ -323,7 +327,16 @@ func analyzeInputWithShellParser(input string, policy *sentinel.Policy) ([]senti
 			findings = append(findings, f)
 			lines = append(lines, int(stmt.Pos().Line()))
 		}
+		return true
+	})
+	fileLines := strings.Split(input, "\n")
+	for i, line := range fileLines {
+		for _, f := range sentinel.AnalyzeWithPolicy(line, policy) {
+			findings = append(findings, f)
+			lines = append(lines, i+1)
+		}
 	}
+
 	if len(findings) == 0 {
 		findings = sentinel.AnalyzeWithPolicy(input, policy)
 		lines = make([]int, len(findings))

