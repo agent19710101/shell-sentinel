@@ -24,7 +24,18 @@ func main() {
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
+	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash)")
 	flag.Parse()
+
+	if *hookShell != "" {
+		h, err := renderHook(*hookShell)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+		fmt.Println(h)
+		return
+	}
 
 	input, err := readInput(*fromStdin, flag.Args())
 	if err != nil {
@@ -104,5 +115,26 @@ func printHuman(r report) {
 		if f.Suggestion != "" {
 			fmt.Printf("   suggestion: %s\n", f.Suggestion)
 		}
+	}
+}
+
+func renderHook(shell string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(shell)) {
+	case "bash":
+		return `# shell-sentinel bash preexec warning hook
+# Usage:
+#   eval "$(shell-sentinel --hook bash)"
+# Optional:
+#   export SHELL_SENTINEL_ARGS="--policy ~/.shell-sentinel.yaml"
+__shell_sentinel_preexec() {
+  local cmd="$BASH_COMMAND"
+  [[ -z "$cmd" ]] && return 0
+  if ! shell-sentinel ${SHELL_SENTINEL_ARGS:-} "$cmd" >/dev/null 2>&1; then
+    echo "[shell-sentinel] high-risk command detected: $cmd" >&2
+  fi
+}
+trap '__shell_sentinel_preexec' DEBUG`, nil
+	default:
+		return "", fmt.Errorf("unsupported shell hook %q (supported: bash)", shell)
 	}
 }
