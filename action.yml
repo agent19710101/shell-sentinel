@@ -21,6 +21,13 @@ inputs:
   policy:
     description: "Optional .shell-sentinel.yaml path"
     required: false
+  policy-profile:
+    description: "Optional policy preset: strict|balanced|legacy"
+    required: false
+  parser:
+    description: "Optional parser mode for file/files scans: none|shell"
+    required: false
+    default: "none"
   baseline:
     description: "Optional baseline file path for accepted findings"
     required: false
@@ -70,6 +77,13 @@ runs:
           baseline_args+=(--baseline "${{ inputs.baseline }}")
         fi
 
+        profile_args=()
+        if [[ -n "${{ inputs.policy-profile }}" ]]; then
+          profile_args+=(--policy-profile "${{ inputs.policy-profile }}")
+        fi
+
+        parser_args=(--parser "${{ inputs.parser }}")
+
         mode_count=0
         [[ -n "${{ inputs.input }}" ]] && mode_count=$((mode_count + 1))
         [[ -n "${{ inputs.file }}" ]] && mode_count=$((mode_count + 1))
@@ -115,20 +129,20 @@ runs:
 
         if [[ -n "${{ inputs.input }}" ]]; then
           set +e
-          "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${report_file}"
+          "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${profile_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${report_file}"
           status=$?
           set -e
 
-          "${bin_path}" --rdjsonl --source "${{ inputs.source }}" --line "${{ inputs.line }}" "${policy_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${rdjsonl_file}"
+          "${bin_path}" --rdjsonl --source "${{ inputs.source }}" --line "${{ inputs.line }}" "${policy_args[@]}" "${profile_args[@]}" "${baseline_args[@]}" "${{ inputs.input }}" >"${rdjsonl_file}"
           overall_status=${status}
 
         elif [[ -n "${{ inputs.file }}" ]]; then
           set +e
-          "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" --file "${{ inputs.file }}" >"${report_file}"
+          "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${profile_args[@]}" "${baseline_args[@]}" --file "${{ inputs.file }}" >"${report_file}"
           status=$?
           set -e
 
-          "${bin_path}" --rdjsonl "${policy_args[@]}" "${baseline_args[@]}" --file "${{ inputs.file }}" >"${rdjsonl_file}"
+          "${bin_path}" --rdjsonl "${policy_args[@]}" "${profile_args[@]}" "${baseline_args[@]}" "${parser_args[@]}" --file "${{ inputs.file }}" >"${rdjsonl_file}"
           overall_status=${status}
 
         else
@@ -157,7 +171,7 @@ runs:
               rd_part="${tmpdir}/$(echo "${f}" | tr '/ ' '__').rdjsonl"
 
               set +e
-              "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${baseline_args[@]}" --file "${f}" >"${report_part}"
+              "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${profile_args[@]}" "${baseline_args[@]}" --file "${f}" >"${report_part}"
               status=$?
               set -e
 
@@ -169,7 +183,7 @@ runs:
                 overall_status=1
               fi
 
-              "${bin_path}" --rdjsonl "${policy_args[@]}" "${baseline_args[@]}" --file "${f}" >"${rd_part}"
+              "${bin_path}" --rdjsonl "${policy_args[@]}" "${profile_args[@]}" "${baseline_args[@]}" "${parser_args[@]}" --file "${f}" >"${rd_part}"
               cat "${rd_part}" >>"${rdjsonl_file}"
               reports+=("${report_part}")
             done

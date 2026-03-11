@@ -16,6 +16,7 @@ import (
 
 	"github.com/agent19710101/shell-sentinel/pkg/sentinel"
 	"gopkg.in/yaml.v3"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 type report struct {
@@ -77,7 +78,9 @@ func main() {
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	inputFile := flag.String("file", "", "read payload from file (line-aware scanning)")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
+	policyProfile := flag.String("policy-profile", "", "optional built-in policy profile: strict|balanced|legacy")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
+	parserMode := flag.String("parser", "none", "parser mode for --file scanning: none|shell")
 	baselinePath := flag.String("baseline", "", "optional baseline file for accepted findings")
 	updateBaseline := flag.Bool("update-baseline", false, "write/merge current findings into baseline file")
 	baselineOwner := flag.String("baseline-owner", "", "owner annotation for newly added baseline entries")
@@ -115,8 +118,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
+	policy, err = applyPolicyProfile(policy, *policyProfile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+	if err := validateParserMode(*parserMode); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
 
-	findings, findingLines := analyzeInput(input, policy, *inputFile)
+	findings, findingLines := analyzeInput(input, policy, *inputFile, *parserMode)
 	baseline, err := loadBaseline(*baselinePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -234,7 +246,7 @@ func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, findingLines []int,
 	return nil
 }
 
-func analyzeInput(input string, policy *sentinel.Policy, filePath string) ([]sentinel.Finding, []int) {
+func analyzeInput(input string, policy *sentinel.Policy, filePath, parserMode string) ([]sentinel.Finding, []int) {
 	if strings.TrimSpace(filePath) == "" {
 		findings := sentinel.AnalyzeWithPolicy(input, policy)
 		lines := make([]int, len(findings))
@@ -242,6 +254,10 @@ func analyzeInput(input string, policy *sentinel.Policy, filePath string) ([]sen
 			lines[i] = 1
 		}
 		return findings, lines
+	}
+
+	if strings.EqualFold(strings.TrimSpace(parserMode), "shell") {
+		return analyzeInputWithShellParser(input, policy)
 	}
 
 	var (
@@ -278,6 +294,43 @@ func analyzeInput(input string, policy *sentinel.Policy, filePath string) ([]sen
 		}
 	}
 
+	return dedupeFindingsWithLines(findings, lines)
+}
+
+func analyzeInputWithShellParser(input string, policy *sentinel.Policy) ([]sentinel.Finding, []int) {
+	parser := syntax.NewParser()
+	file, err := parser.Parse(strings.NewReader(input), "shell-input")
+	if err != nil {
+		findings := sentinel.AnalyzeWithPolicy(input, policy)
+		lines := make([]int, len(findings))
+		for i := range lines {
+			lines[i] = 1
+		}
+		return findings, lines
+	}
+
+	var findings []sentinel.Finding
+	var lines []int
+	for _, stmt := range file.Stmts {
+		start := int(stmt.Pos().Offset())
+		end := int(stmt.End().Offset())
+		if start < 0 || end <= start || end > len(input) {
+			continue
+		}
+		snippet := input[start:end]
+		stmtFindings := sentinel.AnalyzeWithPolicy(snippet, policy)
+		for _, f := range stmtFindings {
+			findings = append(findings, f)
+			lines = append(lines, int(stmt.Pos().Line()))
+		}
+	}
+	if len(findings) == 0 {
+		findings = sentinel.AnalyzeWithPolicy(input, policy)
+		lines = make([]int, len(findings))
+		for i := range lines {
+			lines[i] = 1
+		}
+	}
 	return dedupeFindingsWithLines(findings, lines)
 }
 
@@ -421,15 +474,50 @@ func loadPolicy(path string, disabled bool) (*sentinel.Policy, error) {
 	return &policy, nil
 }
 
+func validateParserMode(mode string) error {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "none", "shell":
+		return nil
+	default:
+		return fmt.Errorf("invalid --parser value %q (supported: none, shell)", mode)
+	}
+}
+
+func applyPolicyProfile(policy *sentinel.Policy, profile string) (*sentinel.Policy, error) {
+	name := strings.ToLower(strings.TrimSpace(profile))
+	if name == "" {
+		return policy, nil
+	}
+	if policy == nil {
+		policy = &sentinel.Policy{}
+	}
+	clone := *policy
+	switch name {
+	case "strict":
+		clone.IgnoreKinds = nil
+	case "balanced":
+		// keep configured policy as-is
+	case "legacy":
+		clone.IgnoreKinds = append(clone.IgnoreKinds, "decoded-pipe-to-shell", "compressed-decoded-pipe-to-shell")
+	default:
+		return nil, fmt.Errorf("invalid --policy-profile value %q (supported: strict, balanced, legacy)", profile)
+	}
+	if err := validatePolicy(clone); err != nil {
+		return nil, err
+	}
+	return &clone, nil
+}
+
 func validatePolicy(policy sentinel.Policy) error {
 	allowedKinds := map[string]struct{}{
-		"ansi-escape":                   {},
-		"non-ascii-domain":              {},
-		"pipe-to-shell":                 {},
-		"decoded-pipe-to-shell":         {},
-		"fetch-in-command-substitution": {},
-		"heredoc-shell-exec":            {},
-		"mixed-script":                  {},
+		"ansi-escape":                      {},
+		"non-ascii-domain":                 {},
+		"pipe-to-shell":                    {},
+		"decoded-pipe-to-shell":            {},
+		"compressed-decoded-pipe-to-shell": {},
+		"fetch-in-command-substitution":    {},
+		"heredoc-shell-exec":               {},
+		"mixed-script":                     {},
 	}
 	invalidKinds := make([]string, 0)
 	for _, k := range policy.IgnoreKinds {
@@ -443,7 +531,7 @@ func validatePolicy(policy sentinel.Policy) error {
 	}
 	if len(invalidKinds) > 0 {
 		sort.Strings(invalidKinds)
-		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, decoded-pipe-to-shell, fetch-in-command-substitution, heredoc-shell-exec, mixed-script)", strings.Join(invalidKinds, ", "))
+		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, decoded-pipe-to-shell, compressed-decoded-pipe-to-shell, fetch-in-command-substitution, heredoc-shell-exec, mixed-script)", strings.Join(invalidKinds, ", "))
 	}
 	return nil
 }

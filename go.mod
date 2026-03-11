@@ -7,4 +7,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require golang.org/x/text v0.34.0 // indirect
+require (
+	golang.org/x/text v0.34.0 // indirect
+	mvdan.cc/sh/v3 v3.13.0 // indirect
+)

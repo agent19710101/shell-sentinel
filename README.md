@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.10.3`
+Current release: `v0.11.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -26,11 +26,14 @@ Implemented:
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.10.3`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.11.0`
+- optional parser-backed file scanning via `--parser shell` for statement-aware line mapping and precision
+- optional team policy presets via `--policy-profile strict|balanced|legacy`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - heredoc shell-execution detection for remote-fetch payloads
 - decoded-payload pipe-to-shell detection (`... | base64 -d | sh`, etc.)
+- compressed decode-and-exec detection (`... | gzip -d | sh`, `... | xz -d | bash`)
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
 - ANSI escape sequence detection
 - mixed-script warning (Latin + non-Latin)
@@ -61,6 +64,9 @@ shell-sentinel --rdjsonl --source scripts/install.sh --line 12 \
 # file-aware scan with direct line mapping in rdjsonl
 shell-sentinel --file scripts/bootstrap.sh --rdjsonl > shell-sentinel.rdjsonl
 
+# opt-in parser-backed file scan mode
+shell-sentinel --file scripts/bootstrap.sh --parser shell --rdjsonl > shell-sentinel.rdjsonl
+
 cat > .shell-sentinel.yaml <<'YAML'
 allow_domains:
   - trusted.example.com
@@ -68,6 +74,9 @@ ignore_kinds:
   - mixed-script
 YAML
 shell-sentinel --policy .shell-sentinel.yaml 'curl https://trusted.example.com/install.sh | sh'
+
+# policy profile presets for team rollout
+shell-sentinel --policy-profile strict 'curl https://example.com/install.sh | sh'
 
 # baseline workflow
 shell-sentinel --json --baseline .shell-sentinel-baseline.json --update-baseline \
@@ -115,7 +124,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.10.3
+      - uses: agent19710101/shell-sentinel@v0.11.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -125,7 +134,7 @@ jobs:
 Repo-wide GitHub Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.10.3
+      - uses: agent19710101/shell-sentinel@v0.11.0
         with:
           files: |
             scripts/*.sh
@@ -136,7 +145,7 @@ Repo-wide GitHub Action example:
 Single-file Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.10.3
+      - uses: agent19710101/shell-sentinel@v0.11.0
         with:
           file: scripts/bootstrap.sh
           fail-on: warn
@@ -147,7 +156,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.10.3
+        uses: agent19710101/shell-sentinel@v0.11.0
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -171,9 +180,9 @@ Action validation helper:
 
 ## Roadmap
 
-- v0.11.0: Add gzip/xz decoder-chain detection coverage (`gzip -d`, `xz -d`) feeding shell execution.
-- v0.12.0: Add optional shell script parser mode for better multiline/control-flow precision and fewer regex false positives.
-- v0.13.0: Add optional policy bundle profiles (`strict`, `balanced`, `legacy`) for teams adopting the scanner at scale.
+- v0.12.0: Add parser-backed control-flow context improvements (loops/functions/conditionals) for `--parser shell` mode.
+- v0.13.0: Add policy profile docs + migration helpers for existing `.shell-sentinel.yaml` repos.
+- v0.14.0: Add shellcheck-compatible output mode for lint pipeline interoperability.
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)  
 Migration notes: [`MIGRATION.md`](./MIGRATION.md)  

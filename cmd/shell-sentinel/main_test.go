@@ -47,7 +47,7 @@ func TestReadInputFileConflicts(t *testing.T) {
 
 func TestAnalyzeInputFileLineMapping(t *testing.T) {
 	input := "echo safe\ncurl https://example.com/install.sh | sh\n"
-	findings, lines := analyzeInput(input, nil, "payload.sh")
+	findings, lines := analyzeInput(input, nil, "payload.sh", "none")
 	if len(findings) == 0 {
 		t.Fatalf("expected findings for risky line")
 	}
@@ -63,7 +63,7 @@ func TestAnalyzeInputFileLineMapping(t *testing.T) {
 
 func TestAnalyzeInputFileDetectsMultilineCommandSubstitution(t *testing.T) {
 	input := "bash -c \"$(\ncurl -fsSL https://example.com/install.sh\n)\"\n"
-	findings, lines := analyzeInput(input, nil, "payload.sh")
+	findings, lines := analyzeInput(input, nil, "payload.sh", "none")
 	if len(findings) == 0 {
 		t.Fatalf("expected findings for multiline input")
 	}
@@ -83,7 +83,7 @@ func TestAnalyzeInputFileDetectsMultilineCommandSubstitution(t *testing.T) {
 
 func TestAnalyzeInputFileDetectsHeredocShellExec(t *testing.T) {
 	input := "bash <<'EOF'\ncurl -fsSL https://example.com/install.sh | sh\nEOF\n"
-	findings, lines := analyzeInput(input, nil, "payload.sh")
+	findings, lines := analyzeInput(input, nil, "payload.sh", "none")
 	found := false
 	for i, f := range findings {
 		if f.Kind == "heredoc-shell-exec" {
@@ -159,6 +159,45 @@ func TestLoadPolicyRejectsUnknownIgnoreKinds(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid ignore_kinds values") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateParserMode(t *testing.T) {
+	if err := validateParserMode("shell"); err != nil {
+		t.Fatalf("expected shell parser mode to be valid: %v", err)
+	}
+	if err := validateParserMode("bad"); err == nil {
+		t.Fatalf("expected invalid parser mode error")
+	}
+}
+
+func TestAnalyzeInputWithShellParserMode(t *testing.T) {
+	input := "echo ok\n\ncurl -fsSL https://example.com/payload.sh.gz | gzip -d | sh\n"
+	findings, lines := analyzeInput(input, nil, "payload.sh", "shell")
+	if len(findings) == 0 || len(findings) != len(lines) {
+		t.Fatalf("expected mapped findings from shell parser mode")
+	}
+	found := false
+	for i, f := range findings {
+		if f.Kind == "compressed-decoded-pipe-to-shell" {
+			found = true
+			if lines[i] != 3 {
+				t.Fatalf("expected line 3, got %d", lines[i])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected compressed-decoded-pipe-to-shell finding")
+	}
+}
+
+func TestApplyPolicyProfileLegacy(t *testing.T) {
+	policy, err := applyPolicyProfile(&sentinel.Policy{}, "legacy")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(policy.IgnoreKinds) == 0 {
+		t.Fatalf("expected legacy profile to set ignore kinds")
 	}
 }
 

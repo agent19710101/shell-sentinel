@@ -76,6 +76,16 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 		})
 	}
 
+	if looksLikeCompressedDecodePipeToShell(input) {
+		findings = append(findings, Finding{
+			Kind:       "compressed-decoded-pipe-to-shell",
+			Severity:   SeverityHigh,
+			Message:    "Compressed payload decoded and piped into shell interpreter",
+			Evidence:   compact(input),
+			Suggestion: "Decompress to a file and review content before execution",
+		})
+	}
+
 	if looksLikeFetchInCommandSubstitution(input) {
 		findings = append(findings, Finding{
 			Kind:       "fetch-in-command-substitution",
@@ -170,6 +180,16 @@ func looksLikeFetchInCommandSubstitution(s string) bool {
 func looksLikeDecodedPipeToShell(s string) bool {
 	l := strings.ToLower(s)
 	if !(strings.Contains(l, "base64 -d") || strings.Contains(l, "base64 --decode") || strings.Contains(l, "openssl base64 -d")) {
+		return false
+	}
+	return strings.Contains(l, "| sh") || strings.Contains(l, "| bash") || strings.Contains(l, "| zsh")
+}
+
+func looksLikeCompressedDecodePipeToShell(s string) bool {
+	l := strings.ToLower(s)
+	hasCompressedDecode := strings.Contains(l, "gzip -d") || strings.Contains(l, "gunzip") ||
+		strings.Contains(l, "xz -d") || strings.Contains(l, "unxz")
+	if !hasCompressedDecode {
 		return false
 	}
 	return strings.Contains(l, "| sh") || strings.Contains(l, "| bash") || strings.Contains(l, "| zsh")
