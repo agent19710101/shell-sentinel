@@ -226,6 +226,36 @@ func TestApplyPolicyProfileLegacy(t *testing.T) {
 	}
 }
 
+func TestRenderPolicyTemplate(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile string
+		want    string
+	}{
+		{name: "strict", profile: "strict", want: "ignore_kinds: []"},
+		{name: "balanced", profile: "balanced", want: "mixed-script"},
+		{name: "legacy", profile: "legacy", want: "decoded-pipe-to-shell"},
+		{name: "all", profile: "all", want: "# strict"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := renderPolicyTemplate(tt.profile)
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if !strings.Contains(got, tt.want) {
+				t.Fatalf("expected output to contain %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestRenderPolicyTemplateUnsupported(t *testing.T) {
+	if _, err := renderPolicyTemplate("weird"); err == nil {
+		t.Fatalf("expected error for unsupported template profile")
+	}
+}
+
 func TestRenderHookBash(t *testing.T) {
 	hook, err := renderHook("bash")
 	if err != nil {

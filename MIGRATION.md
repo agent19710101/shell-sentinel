@@ -34,3 +34,24 @@ Behavior:
 ### No breaking CLI changes
 
 CLI flags and output contracts from `v0.9.x` remain compatible.
+
+## v0.12.1
+
+### Policy profile migration helper templates
+
+Use built-in templates to bootstrap or refresh `.shell-sentinel.yaml` quickly:
+
+```bash
+# print all built-in templates
+shell-sentinel --print-policy-template all
+
+# print a specific template
+shell-sentinel --print-policy-template strict > .shell-sentinel.yaml
+```
+
+Guidance:
+- `strict`: no ignored finding kinds; highest-signal rollout.
+- `balanced`: practical default with `mixed-script` ignored.
+- `legacy`: preserves older behavior by ignoring decode-and-exec findings.
+
+No breaking behavior changes for existing policy files.

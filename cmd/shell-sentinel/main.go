@@ -79,6 +79,7 @@ func main() {
 	inputFile := flag.String("file", "", "read payload from file (line-aware scanning)")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	policyProfile := flag.String("policy-profile", "", "optional built-in policy profile: strict|balanced|legacy")
+	printPolicyTemplate := flag.String("print-policy-template", "", "print built-in policy template: strict|balanced|legacy|all")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
 	parserMode := flag.String("parser", "none", "parser mode for --file scanning: none|shell")
 	baselinePath := flag.String("baseline", "", "optional baseline file for accepted findings")
@@ -104,6 +105,16 @@ func main() {
 			os.Exit(2)
 		}
 		fmt.Println(h)
+		return
+	}
+
+	if strings.TrimSpace(*printPolicyTemplate) != "" {
+		tpl, err := renderPolicyTemplate(*printPolicyTemplate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+		fmt.Print(tpl)
 		return
 	}
 
@@ -661,6 +672,35 @@ func printHuman(r report) {
 		if f.Suggestion != "" {
 			fmt.Printf("   suggestion: %s\n", f.Suggestion)
 		}
+	}
+}
+
+func renderPolicyTemplate(profile string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "strict":
+		return "# shell-sentinel policy template (strict)\n# blocks all supported findings\nallow_domains: []\nignore_kinds: []\n", nil
+	case "balanced":
+		return "# shell-sentinel policy template (balanced)\n# default team policy; tune allow_domains as needed\nallow_domains:\n  - trusted.example.com\nignore_kinds:\n  - mixed-script\n", nil
+	case "legacy":
+		return "# shell-sentinel policy template (legacy)\n# preserves older behavior by ignoring decode-and-exec findings\nallow_domains:\n  - trusted.example.com\nignore_kinds:\n  - mixed-script\n  - decoded-pipe-to-shell\n  - compressed-decoded-pipe-to-shell\n", nil
+	case "all":
+		return "# strict\n" +
+			"allow_domains: []\n" +
+			"ignore_kinds: []\n\n" +
+			"# balanced\n" +
+			"allow_domains:\n" +
+			"  - trusted.example.com\n" +
+			"ignore_kinds:\n" +
+			"  - mixed-script\n\n" +
+			"# legacy\n" +
+			"allow_domains:\n" +
+			"  - trusted.example.com\n" +
+			"ignore_kinds:\n" +
+			"  - mixed-script\n" +
+			"  - decoded-pipe-to-shell\n" +
+			"  - compressed-decoded-pipe-to-shell\n", nil
+	default:
+		return "", fmt.Errorf("unsupported --print-policy-template value %q (supported: strict, balanced, legacy, all)", profile)
 	}
 }
 

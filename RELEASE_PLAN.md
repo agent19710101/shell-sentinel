@@ -3,7 +3,7 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## Delivered foundation (v0.8.0 → v0.12.0)
+## Delivered foundation (v0.8.0 → v0.12.1)
 
 Shipped:
 - Rule-coverage expansion for shell execution forms and encoded/compressed payload chains.
@@ -11,20 +11,10 @@ Shipped:
 - Stable machine-readable outputs (`--json`, `--sarif`, `--rdjsonl`) with contract tests.
 - File-aware scanning plus opt-in parser-backed file scanning (`--parser shell`) for higher precision.
 - Team policy profiles (`strict`, `balanced`, `legacy`) for rollout ergonomics.
+- Built-in policy migration templates (`--print-policy-template`) for fast `.shell-sentinel.yaml` bootstrap.
 - CI/release hardening and action validation coverage.
 
-## v0.13.0 — Policy profile migration polish
-
-Scope:
-- Add profile migration helpers/docs for existing `.shell-sentinel.yaml` users.
-- Clarify precedence of `--policy-profile` + local policy file overrides.
-- Add examples for team-wide onboarding patterns.
-
-Exit criteria:
-- Migration paths documented and tested.
-- README + migration notes include profile adoption playbook.
-
-## v0.14.0 — Ecosystem output compatibility
+## v0.13.1 — Ecosystem output compatibility
 
 Scope:
 - Add shellcheck-compatible output formatter for existing lint pipelines.
@@ -34,7 +24,7 @@ Exit criteria:
 - Formatter output covered by golden tests.
 - README contains CI usage examples.
 
-## v0.15.0 — Parser diagnostics explainability
+## v0.14.0 — Parser diagnostics explainability
 
 Scope:
 - Add optional parser debug output to show matched control-flow context for each finding.
@@ -43,3 +33,13 @@ Scope:
 Exit criteria:
 - Debug output covered by snapshot tests.
 - CI docs include troubleshooting examples.
+
+## v0.15.0 — Finding confidence metadata
+
+Scope:
+- Add optional confidence score bands per finding for incremental policy rollout.
+- Expose confidence in JSON/SARIF/rdjsonl without breaking existing contracts.
+
+Exit criteria:
+- Confidence mapping documented with tests.
+- Action/README examples show warn-only confidence gating patterns.

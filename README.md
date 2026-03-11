@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.12.0`
+Current release: `v0.12.1`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -26,10 +26,11 @@ Implemented:
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.12.0`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.12.1`
 - optional parser-backed file scanning via `--parser shell` for statement-aware line mapping and precision
 - improved parser control-flow coverage for functions/loops/conditionals with line-level fallback mapping
 - optional team policy presets via `--policy-profile strict|balanced|legacy`
+- built-in migration helper templates via `--print-policy-template strict|balanced|legacy|all`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - heredoc shell-execution detection for remote-fetch payloads
@@ -79,6 +80,9 @@ shell-sentinel --policy .shell-sentinel.yaml 'curl https://trusted.example.com/i
 # policy profile presets for team rollout
 shell-sentinel --policy-profile strict 'curl https://example.com/install.sh | sh'
 
+# print migration-ready policy templates
+shell-sentinel --print-policy-template all
+
 # baseline workflow
 shell-sentinel --json --baseline .shell-sentinel-baseline.json --update-baseline \
   --baseline-owner sec-team \
@@ -125,7 +129,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.12.0
+      - uses: agent19710101/shell-sentinel@v0.12.1
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -135,7 +139,7 @@ jobs:
 Repo-wide GitHub Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.12.0
+      - uses: agent19710101/shell-sentinel@v0.12.1
         with:
           files: |
             scripts/*.sh
@@ -146,7 +150,7 @@ Repo-wide GitHub Action example:
 Single-file Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.12.0
+      - uses: agent19710101/shell-sentinel@v0.12.1
         with:
           file: scripts/bootstrap.sh
           fail-on: warn
@@ -157,7 +161,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.12.0
+        uses: agent19710101/shell-sentinel@v0.12.1
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -181,9 +185,9 @@ Action validation helper:
 
 ## Roadmap
 
-- v0.13.0: Add policy profile docs + migration helpers for existing `.shell-sentinel.yaml` repos.
-- v0.14.0: Add shellcheck-compatible output mode for lint pipeline interoperability.
-- v0.15.0: Add parser diagnostics debug view to explain matching context in CI logs.
+- v0.13.1: Add shellcheck-compatible output mode for lint pipeline interoperability.
+- v0.14.0: Add parser diagnostics debug view to explain matching context in CI logs.
+- v0.15.0: Add confidence metadata per finding for gradual enforcement workflows.
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)  
 Migration notes: [`MIGRATION.md`](./MIGRATION.md)  
