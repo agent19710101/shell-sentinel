@@ -27,10 +27,13 @@ type report struct {
 }
 
 type reportStats struct {
-	Total int `json:"total"`
-	High  int `json:"high"`
-	Warn  int `json:"warn"`
-	Info  int `json:"info"`
+	Total            int `json:"total"`
+	High             int `json:"high"`
+	Warn             int `json:"warn"`
+	Info             int `json:"info"`
+	ConfidenceHigh   int `json:"confidence_high"`
+	ConfidenceMedium int `json:"confidence_medium"`
+	ConfidenceLow    int `json:"confidence_low"`
 }
 
 type baselineFile struct {
@@ -475,6 +478,14 @@ func summarizeFindings(findings []sentinel.Finding) reportStats {
 			stats.Warn++
 		default:
 			stats.Info++
+		}
+		switch f.Confidence {
+		case sentinel.ConfidenceHigh:
+			stats.ConfidenceHigh++
+		case sentinel.ConfidenceMedium:
+			stats.ConfidenceMedium++
+		case sentinel.ConfidenceLow:
+			stats.ConfidenceLow++
 		}
 	}
 	return stats

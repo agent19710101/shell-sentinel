@@ -533,7 +533,7 @@ func TestValidateBaselineFlags(t *testing.T) {
 
 func TestEncodeReportJSONIncludesStats(t *testing.T) {
 	var out bytes.Buffer
-	r := report{Input: "x", Severity: sentinel.SeverityHigh, Stats: reportStats{Total: 2, High: 1, Warn: 1}, Findings: []sentinel.Finding{{Kind: "k", Severity: sentinel.SeverityHigh, Message: "m"}}}
+	r := report{Input: "x", Severity: sentinel.SeverityHigh, Stats: reportStats{Total: 2, High: 1, Warn: 1, ConfidenceHigh: 1, ConfidenceMedium: 1}, Findings: []sentinel.Finding{{Kind: "k", Severity: sentinel.SeverityHigh, Message: "m"}}}
 	if err := encodeReportJSON(&out, r); err != nil {
 		t.Fatalf("encode json: %v", err)
 	}
@@ -545,6 +545,23 @@ func TestEncodeReportJSONIncludesStats(t *testing.T) {
 	}
 	if decoded.Stats.Total != 2 || decoded.Stats.High != 1 || decoded.Stats.Warn != 1 {
 		t.Fatalf("unexpected stats: %#v", decoded.Stats)
+	}
+	if decoded.Stats.ConfidenceHigh != 1 || decoded.Stats.ConfidenceMedium != 1 || decoded.Stats.ConfidenceLow != 0 {
+		t.Fatalf("unexpected confidence stats: %#v", decoded.Stats)
+	}
+}
+
+func TestSummarizeFindingsIncludesConfidenceBreakdown(t *testing.T) {
+	stats := summarizeFindings([]sentinel.Finding{
+		{Kind: sentinel.KindPipeToShell, Severity: sentinel.SeverityHigh, Confidence: sentinel.ConfidenceHigh, Message: "x"},
+		{Kind: sentinel.KindANSIEscape, Severity: sentinel.SeverityWarn, Confidence: sentinel.ConfidenceMedium, Message: "y"},
+		{Kind: "unknown", Severity: sentinel.SeverityInfo, Confidence: sentinel.ConfidenceLow, Message: "z"},
+	})
+	if stats.Total != 3 || stats.High != 1 || stats.Warn != 1 || stats.Info != 1 {
+		t.Fatalf("unexpected severity stats: %#v", stats)
+	}
+	if stats.ConfidenceHigh != 1 || stats.ConfidenceMedium != 1 || stats.ConfidenceLow != 1 {
+		t.Fatalf("unexpected confidence stats: %#v", stats)
 	}
 }
 

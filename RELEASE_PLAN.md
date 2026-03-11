@@ -3,7 +3,7 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## Delivered foundation (v0.8.0 → v0.15.0)
+## Delivered foundation (v0.8.0 → v0.16.0)
 
 Shipped:
 - Rule-coverage expansion for shell execution forms and encoded/compressed payload chains.
@@ -40,3 +40,13 @@ Delivered:
 Exit criteria:
 - Confidence mapping documented with tests.
 - README/examples updated for confidence-aware automation.
+
+## v0.16.0 — JSON confidence stats breakdown
+
+Delivered:
+- Added additive confidence counters to JSON report stats (`confidence_high`, `confidence_medium`, `confidence_low`).
+- Preserved stable top-level output contract and existing severity stats.
+
+Exit criteria:
+- Confidence stats covered by tests.
+- README contract docs updated.

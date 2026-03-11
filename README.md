@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.15.0`
+Current release: `v0.16.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -27,7 +27,7 @@ Implemented:
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
 - shellcheck-compatible diagnostics via `--shellcheck` for legacy lint pipeline interoperability
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.15.0`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.16.0`
 - optional parser-backed file scanning via `--parser shell` for statement-aware line mapping and precision
 - parser diagnostics debug view via `--parser-debug` to explain matched statement context in CI logs
 - improved parser control-flow coverage for functions/loops/conditionals with line-level fallback mapping
@@ -47,7 +47,7 @@ Implemented:
 ## Install
 
 ```bash
-go install github.com/agent19710101/shell-sentinel@v0.15.0
+go install github.com/agent19710101/shell-sentinel@v0.16.0
 ```
 
 ## Examples
@@ -121,7 +121,7 @@ Exit codes:
 
 JSON output contract:
 - top-level keys are stable: `input`, `severity`, `stats`, `findings`
-- `stats` includes `total`, `high`, `warn`, `info` counts
+- `stats` includes `total`, `high`, `warn`, `info` and confidence counts (`confidence_high`, `confidence_medium`, `confidence_low`)
 - `findings` is always an array (`[]` when no findings)
 - each finding includes additive `confidence` metadata (`low|medium|high`)
 
@@ -139,7 +139,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.15.0
+      - uses: agent19710101/shell-sentinel@v0.16.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -149,7 +149,7 @@ jobs:
 Repo-wide GitHub Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.15.0
+      - uses: agent19710101/shell-sentinel@v0.16.0
         with:
           files: |
             scripts/*.sh
@@ -160,7 +160,7 @@ Repo-wide GitHub Action example:
 Single-file Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.15.0
+      - uses: agent19710101/shell-sentinel@v0.16.0
         with:
           file: scripts/bootstrap.sh
           fail-on: warn
@@ -171,7 +171,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.15.0
+        uses: agent19710101/shell-sentinel@v0.16.0
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -198,6 +198,7 @@ Action validation helper:
 - v0.13.0: Shellcheck output + detection/registry/action reproducibility hardening shipped.
 - v0.14.0: Parser diagnostics debug view shipped (`--parser-debug`).
 - v0.15.0: Confidence metadata per finding shipped across JSON/SARIF/rdjsonl/shellcheck outputs.
+- v0.16.0: JSON stats confidence breakdown shipped (`confidence_high`, `confidence_medium`, `confidence_low`).
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)  
 Migration notes: [`MIGRATION.md`](./MIGRATION.md)  
