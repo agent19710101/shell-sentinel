@@ -3,7 +3,7 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## Delivered foundation (v0.8.0 → v0.14.0)
+## Delivered foundation (v0.8.0 → v0.15.0)
 
 Shipped:
 - Rule-coverage expansion for shell execution forms and encoded/compressed payload chains.
@@ -33,10 +33,10 @@ Delivered:
 
 ## v0.15.0 — Finding confidence metadata
 
-Scope:
-- Add optional confidence score bands per finding for incremental policy rollout.
-- Expose confidence in JSON/SARIF/rdjsonl without breaking existing contracts.
+Delivered:
+- Added confidence bands per finding (`low|medium|high`) for gradual rollout workflows.
+- Exposed confidence additively in JSON/SARIF/rdjsonl/shellcheck outputs without breaking existing contracts.
 
 Exit criteria:
 - Confidence mapping documented with tests.
-- Action/README examples show warn-only confidence gating patterns.
+- README/examples updated for confidence-aware automation.

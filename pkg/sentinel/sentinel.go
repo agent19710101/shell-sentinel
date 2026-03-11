@@ -41,12 +41,21 @@ var knownKinds = []string{
 	KindMixedScript,
 }
 
+type Confidence string
+
+const (
+	ConfidenceLow    Confidence = "low"
+	ConfidenceMedium Confidence = "medium"
+	ConfidenceHigh   Confidence = "high"
+)
+
 type Finding struct {
-	Kind       string   `json:"kind"`
-	Severity   Severity `json:"severity"`
-	Message    string   `json:"message"`
-	Evidence   string   `json:"evidence,omitempty"`
-	Suggestion string   `json:"suggestion,omitempty"`
+	Kind       string     `json:"kind"`
+	Severity   Severity   `json:"severity"`
+	Confidence Confidence `json:"confidence,omitempty"`
+	Message    string     `json:"message"`
+	Evidence   string     `json:"evidence,omitempty"`
+	Suggestion string     `json:"suggestion,omitempty"`
 }
 
 type Policy struct {
@@ -136,6 +145,12 @@ func AnalyzeWithPolicy(input string, policy *Policy) []Finding {
 			Evidence:   compact(input),
 			Suggestion: "Avoid executing heredoc content that fetches remote scripts; save and review first",
 		})
+	}
+
+	for i := range findings {
+		if findings[i].Confidence == "" {
+			findings[i].Confidence = confidenceForKind(findings[i].Kind)
+		}
 	}
 
 	return filterIgnoredFindings(findings, policy)
@@ -320,6 +335,24 @@ func IsKnownKind(kind string) bool {
 		}
 	}
 	return false
+}
+
+func confidenceForKind(kind string) Confidence {
+	switch kind {
+	case KindPipeToShell,
+		KindDecodedPipeToShell,
+		KindCompressedDecodedPipeToShell,
+		KindFetchInCommandSubstitution,
+		KindHeredocShellExec:
+		return ConfidenceHigh
+	case KindANSIEscape,
+		KindMixedScript:
+		return ConfidenceMedium
+	case KindNonASCIIDomain:
+		return ConfidenceHigh
+	default:
+		return ConfidenceLow
+	}
 }
 
 func filterIgnoredFindings(findings []Finding, policy *Policy) []Finding {

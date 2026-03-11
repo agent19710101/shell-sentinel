@@ -51,9 +51,10 @@ type baselineEntry struct {
 }
 
 type rdjsonlDiagnostic struct {
-	Message  string `json:"message"`
-	Severity string `json:"severity"`
-	Code     struct {
+	Message    string `json:"message"`
+	Severity   string `json:"severity"`
+	Confidence string `json:"confidence,omitempty"`
+	Code       struct {
 		Value string `json:"value"`
 	} `json:"code"`
 	Location struct {
@@ -264,8 +265,9 @@ func encodeRDJSONL(w io.Writer, findings []sentinel.Finding, findingLines []int,
 			findingLine = findingLines[i]
 		}
 		d := rdjsonlDiagnostic{
-			Message:  f.Message,
-			Severity: rdSeverity(f.Severity),
+			Message:    f.Message,
+			Severity:   rdSeverity(f.Severity),
+			Confidence: string(f.Confidence),
 		}
 		d.Code.Value = f.Kind
 		d.Location.Path = source
@@ -295,6 +297,9 @@ func encodeShellcheck(w io.Writer, findings []sentinel.Finding, findingLines []i
 		msg := f.Message
 		if f.Evidence != "" {
 			msg = fmt.Sprintf("%s (evidence: %s)", f.Message, f.Evidence)
+		}
+		if f.Confidence != "" {
+			msg = fmt.Sprintf("%s (confidence: %s)", msg, f.Confidence)
 		}
 		if _, err := fmt.Fprintf(w, "%s:%d:%d: %s: %s [%s]\n", source, findingLine, 1, shellcheckSeverity(f.Severity), msg, f.Kind); err != nil {
 			return err

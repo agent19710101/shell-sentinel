@@ -50,10 +50,11 @@ type sarifArtifactLocation struct {
 }
 
 type sarifResult struct {
-	RuleID    string           `json:"ruleId"`
-	Level     string           `json:"level"`
-	Message   sarifMessageText `json:"message"`
-	Locations []sarifLocation  `json:"locations,omitempty"`
+	RuleID     string            `json:"ruleId"`
+	Level      string            `json:"level"`
+	Message    sarifMessageText  `json:"message"`
+	Locations  []sarifLocation   `json:"locations,omitempty"`
+	Properties map[string]string `json:"properties,omitempty"`
 }
 
 type sarifLocation struct {
@@ -95,6 +96,9 @@ func SARIFReport(input string, findings []Finding) any {
 			RuleID:  f.Kind,
 			Level:   sarifLevel(f.Severity),
 			Message: sarifMessageText{Text: msg},
+			Properties: map[string]string{
+				"confidence": string(f.Confidence),
+			},
 			Locations: []sarifLocation{{
 				PhysicalLocation: sarifPhysicalLocation{
 					ArtifactLocation: sarifArtifactLocation{URI: "shell-input"},
