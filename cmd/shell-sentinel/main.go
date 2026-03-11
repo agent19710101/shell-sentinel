@@ -83,6 +83,7 @@ func main() {
 	printPolicyTemplate := flag.String("print-policy-template", "", "print built-in policy template: strict|balanced|legacy|all")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
 	parserMode := flag.String("parser", "none", "parser mode for --file scanning: none|shell")
+	parserDebug := flag.Bool("parser-debug", false, "print parser match context to stderr (requires --file --parser shell)")
 	baselinePath := flag.String("baseline", "", "optional baseline file for accepted findings")
 	updateBaseline := flag.Bool("update-baseline", false, "write/merge current findings into baseline file")
 	baselineOwner := flag.String("baseline-owner", "", "owner annotation for newly added baseline entries")
@@ -139,8 +140,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
+	if err := validateParserDebug(*parserDebug, *inputFile, *parserMode); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
 
 	findings, findingLines := analyzeInput(input, policy, *inputFile, *parserMode)
+	if *parserDebug {
+		emitParserDebug(os.Stderr, buildParserDebugEvents(input, policy))
+	}
 	baseline, err := loadBaseline(*baselinePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -558,6 +566,81 @@ func validateParserMode(mode string) error {
 	default:
 		return fmt.Errorf("invalid --parser value %q (supported: none, shell)", mode)
 	}
+}
+
+func validateParserDebug(enabled bool, filePath, parserMode string) error {
+	if !enabled {
+		return nil
+	}
+	if strings.TrimSpace(filePath) == "" {
+		return fmt.Errorf("--parser-debug requires --file")
+	}
+	if !strings.EqualFold(strings.TrimSpace(parserMode), "shell") {
+		return fmt.Errorf("--parser-debug requires --parser shell")
+	}
+	return nil
+}
+
+type parserDebugEvent struct {
+	Line    int
+	Kinds   []string
+	Snippet string
+}
+
+func buildParserDebugEvents(input string, policy *sentinel.Policy) []parserDebugEvent {
+	parser := syntax.NewParser()
+	file, err := parser.Parse(strings.NewReader(input), "shell-input")
+	if err != nil {
+		return nil
+	}
+	var events []parserDebugEvent
+	syntax.Walk(file, func(node syntax.Node) bool {
+		stmt, ok := node.(*syntax.Stmt)
+		if !ok || stmt == nil {
+			return true
+		}
+		start := int(stmt.Pos().Offset())
+		end := int(stmt.End().Offset())
+		if start < 0 || end <= start || end > len(input) {
+			return true
+		}
+		snippet := input[start:end]
+		fs := sentinel.AnalyzeWithPolicy(snippet, policy)
+		if len(fs) == 0 {
+			return true
+		}
+		kinds := make([]string, 0, len(fs))
+		seen := map[string]struct{}{}
+		for _, f := range fs {
+			if _, ok := seen[f.Kind]; ok {
+				continue
+			}
+			seen[f.Kind] = struct{}{}
+			kinds = append(kinds, f.Kind)
+		}
+		sort.Strings(kinds)
+		events = append(events, parserDebugEvent{
+			Line:    int(stmt.Pos().Line()),
+			Kinds:   kinds,
+			Snippet: compactSnippet(snippet),
+		})
+		return true
+	})
+	return events
+}
+
+func emitParserDebug(w io.Writer, events []parserDebugEvent) {
+	for _, e := range events {
+		fmt.Fprintf(w, "[parser-debug] line=%d kinds=%s snippet=%q\n", e.Line, strings.Join(e.Kinds, ","), e.Snippet)
+	}
+}
+
+func compactSnippet(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 120 {
+		return s[:120] + "..."
+	}
+	return s
 }
 
 func applyPolicyProfile(policy *sentinel.Policy, profile string) (*sentinel.Policy, error) {

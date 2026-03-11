@@ -3,7 +3,7 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## Delivered foundation (v0.8.0 → v0.13.0)
+## Delivered foundation (v0.8.0 → v0.14.0)
 
 Shipped:
 - Rule-coverage expansion for shell execution forms and encoded/compressed payload chains.
@@ -23,15 +23,13 @@ Delivered:
 - Pinned GitHub Action install default to a release tag for reproducibility.
 - Centralized finding-kind registry in `pkg/sentinel` to prevent drift across validation/output paths.
 
-## v0.14.0 — Parser diagnostics explainability
+## v0.14.0 — Parser diagnostics explainability (shipped)
 
-Scope:
-- Add optional parser debug output to show matched control-flow context for each finding.
-- Keep default output stable unless debug mode is explicitly enabled.
-
-Exit criteria:
-- Debug output covered by snapshot tests.
-- CI docs include troubleshooting examples.
+Delivered:
+- Added `--parser-debug` for `--file --parser shell` runs to print matched statement context to stderr.
+- Kept default output contracts stable; debug output is opt-in only.
+- Added validation/tests for debug-mode constraints and parser debug event coverage.
+- Added README troubleshooting example for CI/debug workflows.
 
 ## v0.15.0 — Finding confidence metadata
 
