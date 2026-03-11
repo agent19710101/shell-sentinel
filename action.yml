@@ -16,7 +16,7 @@ inputs:
     description: "Optional .shell-sentinel.yaml path"
     required: false
   version:
-    description: "Version to install (e.g. v0.6.0 or latest)"
+    description: "Version to install (e.g. v0.7.0 or latest)"
     required: false
     default: "latest"
 outputs:
@@ -54,9 +54,26 @@ runs:
           echo "EOF"
         } >>"$GITHUB_OUTPUT"
 
+        # Emit workflow annotations for each finding.
+        while IFS=$'\t' read -r sev kind msg evidence; do
+          [[ -z "${sev}" ]] && continue
+          level="notice"
+          case "${sev}" in
+            high) level="error" ;;
+            warn) level="warning" ;;
+          esac
+          text="${msg}"
+          if [[ -n "${evidence}" && "${evidence}" != "null" ]]; then
+            text+=" (evidence: ${evidence})"
+          fi
+          text="${text//'%'/'%25'}"
+          text="${text//$'\n'/'%0A'}"
+          text="${text//$'\r'/'%0D'}"
+          echo "::${level} title=shell-sentinel/${kind}::${text}"
+        done < <(jq -r '.findings[]? | [.severity, .kind, .message, (.evidence // "")] | @tsv' "${report_file}")
+
         if [[ $status -eq 1 ]]; then
-          echo "High-risk findings detected by shell-sentinel."
-          cat "${report_file}"
+          echo "shell-sentinel findings reached fail-on=${{ inputs.fail-on }} threshold."
           exit 1
         fi
 

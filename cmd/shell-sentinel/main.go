@@ -21,12 +21,18 @@ type report struct {
 
 func main() {
 	jsonOut := flag.Bool("json", false, "print JSON report")
+	sarifOut := flag.Bool("sarif", false, "print SARIF v2.1.0 report")
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
 	failOn := flag.String("fail-on", "high", "exit non-zero for findings at or above this severity: warn|high")
 	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh, fish)")
 	flag.Parse()
+
+	if *jsonOut && *sarifOut {
+		fmt.Fprintln(os.Stderr, "error: --json and --sarif are mutually exclusive")
+		os.Exit(2)
+	}
 
 	if *hookShell != "" {
 		h, err := renderHook(*hookShell)
@@ -54,11 +60,18 @@ func main() {
 	sev := sentinel.HighestSeverity(findings)
 	r := report{Input: input, Severity: sev, Findings: findings}
 
-	if *jsonOut {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(r)
-	} else {
+	switch {
+	case *sarifOut:
+		if err := encodeSARIF(os.Stdout, input, findings); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+	case *jsonOut:
+		if err := encodeReportJSON(os.Stdout, r); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+	default:
 		printHuman(r)
 	}
 
@@ -70,6 +83,21 @@ func main() {
 	if fail {
 		os.Exit(1)
 	}
+}
+
+func encodeReportJSON(w io.Writer, r report) error {
+	if r.Findings == nil {
+		r.Findings = []sentinel.Finding{}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(r)
+}
+
+func encodeSARIF(w io.Writer, input string, findings []sentinel.Finding) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(sentinel.SARIFReport(input, findings))
 }
 
 func shouldFail(sev sentinel.Severity, failOn string) (bool, error) {

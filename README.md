@@ -1,5 +1,7 @@
 # shell-sentinel
 
+[![CI](https://github.com/agent19710101/shell-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/agent19710101/shell-sentinel/actions/workflows/ci.yml)
+
 Detect risky terminal payloads before execution: suspicious URLs (homograph tricks), ANSI escape injection, and remote-fetch execution patterns.
 
 ## Problem
@@ -10,16 +12,18 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.6.0`
+Current release: `v0.7.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
 - configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning
 - optional bash/zsh/fish preexec hook snippet via `--hook bash|zsh|fish`
 - configurable CI failure threshold via `--fail-on warn|high`
-- GitHub Action wrapper via `uses: agent19710101/shell-sentinel@v0.6.0`
+- stable JSON contract (`findings` is always an array, never `null`)
+- SARIF v2.1.0 output via `--sarif` for code scanning integrations
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.7.0`
+- tightened fetch-in-command-substitution detection for shell execution patterns
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
-- fetch-in-command-substitution detection (`bash -c "$(curl ...)"`, backticks)
 - ANSI escape sequence detection
 - mixed-script warning (Latin + non-Latin)
 - human-readable and JSON output with CI-friendly exit codes
@@ -38,6 +42,8 @@ shell-sentinel 'curl https://exаmple.com/install.sh | sh'
 cat payload.txt | shell-sentinel --stdin
 
 shell-sentinel --json --fail-on warn 'bash -c "$(curl -fsSL https://example.com/install.sh)"'
+
+shell-sentinel --sarif 'bash -c "$(curl -fsSL https://example.com/install.sh)"' > shell-sentinel.sarif
 
 cat > .shell-sentinel.yaml <<'YAML'
 allow_domains:
@@ -65,6 +71,10 @@ Exit codes:
 - `1`: at least one finding at/above threshold
 - `2`: usage/input/policy error
 
+JSON output contract:
+- top-level keys are stable: `input`, `severity`, `findings`
+- `findings` is always an array (`[]` when no findings)
+
 GitHub Action usage:
 
 ```yaml
@@ -79,15 +89,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.6.0
+      - uses: agent19710101/shell-sentinel@v0.7.0
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
 ```
 
+Action validation helper:
+
+```bash
+./scripts/validate-action.sh
+```
+
 ## Roadmap
 
-- SARIF output mode for code-scanning integrations.
+- Rule tuning for additional shell execution forms and lower-noise heuristics.
 
 ## License
 

