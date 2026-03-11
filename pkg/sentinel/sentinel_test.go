@@ -13,6 +13,24 @@ func TestAnalyzeDetectsHighRiskPatterns(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDetectsFetchInCommandSubstitution(t *testing.T) {
+	in := "bash -c \"$(curl -fsSL https://example.com/install.sh)\""
+	findings := Analyze(in)
+
+	var found bool
+	for _, f := range findings {
+		if f.Kind == "fetch-in-command-substitution" {
+			found = true
+			if f.Severity != SeverityHigh {
+				t.Fatalf("expected high severity, got %s", f.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected fetch-in-command-substitution finding")
+	}
+}
+
 func TestAnalyzeNoFindings(t *testing.T) {
 	in := "go test ./..."
 	findings := Analyze(in)

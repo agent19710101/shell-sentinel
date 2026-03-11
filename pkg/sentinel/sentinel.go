@@ -50,6 +50,16 @@ func Analyze(input string) []Finding {
 		})
 	}
 
+	if looksLikeFetchInCommandSubstitution(input) {
+		findings = append(findings, Finding{
+			Kind:       "fetch-in-command-substitution",
+			Severity:   SeverityHigh,
+			Message:    "Remote content executed via command substitution",
+			Evidence:   compact(input),
+			Suggestion: "Avoid $(...) or backticks for remote content; save and inspect first",
+		})
+	}
+
 	if hasSuspiciousUnicode(input) {
 		findings = append(findings, Finding{
 			Kind:       "mixed-script",
@@ -109,6 +119,17 @@ func looksLikePipeToShell(s string) bool {
 	}
 	return (strings.Contains(l, "curl") || strings.Contains(l, "wget")) &&
 		(strings.Contains(l, "| sh") || strings.Contains(l, "| bash") || strings.Contains(l, "| zsh"))
+}
+
+func looksLikeFetchInCommandSubstitution(s string) bool {
+	l := strings.ToLower(s)
+	if !(strings.Contains(l, "$(") || strings.Contains(l, "`")) {
+		return false
+	}
+	if !(strings.Contains(l, "curl") || strings.Contains(l, "wget")) {
+		return false
+	}
+	return strings.Contains(l, "sh") || strings.Contains(l, "bash") || strings.Contains(l, "zsh")
 }
 
 func hasSuspiciousUnicode(s string) bool {
