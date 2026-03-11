@@ -24,7 +24,7 @@ func main() {
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
-	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh)")
+	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh, fish)")
 	flag.Parse()
 
 	if *hookShell != "" {
@@ -149,7 +149,22 @@ __shell_sentinel_preexec() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec __shell_sentinel_preexec`, nil
+	case "fish":
+		return `# shell-sentinel fish preexec warning hook
+# Usage:
+#   shell-sentinel --hook fish | source
+# Optional:
+#   set -gx SHELL_SENTINEL_ARGS "--policy ~/.shell-sentinel.yaml"
+function __shell_sentinel_preexec --on-event fish_preexec
+  set -l cmd $argv[1]
+  if test -z "$cmd"
+    return 0
+  end
+  if not shell-sentinel $SHELL_SENTINEL_ARGS "$cmd" >/dev/null 2>&1
+    echo "[shell-sentinel] high-risk command detected: $cmd" >&2
+  end
+end`, nil
 	default:
-		return "", fmt.Errorf("unsupported shell hook %q (supported: bash, zsh)", shell)
+		return "", fmt.Errorf("unsupported shell hook %q (supported: bash, zsh, fish)", shell)
 	}
 }

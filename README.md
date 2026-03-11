@@ -10,12 +10,12 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.4.0`
+Current release: `v0.5.0`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
 - configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning
-- optional bash/zsh preexec hook snippet via `--hook bash|zsh`
+- optional bash/zsh/fish preexec hook snippet via `--hook bash|zsh|fish`
 - pipe-to-shell detection (`curl|sh`, `wget|bash`, etc.)
 - fetch-in-command-substitution detection (`bash -c "$(curl ...)"`, backticks)
 - ANSI escape sequence detection
@@ -52,6 +52,10 @@ eval "$(shell-sentinel --hook bash)"
 # print and enable zsh preexec warning hook
 # (add to ~/.zshrc to persist)
 eval "$(shell-sentinel --hook zsh)"
+
+# print and enable fish preexec warning hook
+# (add to ~/.config/fish/config.fish to persist)
+shell-sentinel --hook fish | source
 ```
 
 Exit codes:
@@ -61,7 +65,6 @@ Exit codes:
 
 ## Roadmap
 
-- fish shell hook variant.
 - GitHub Action wrapper for CI policy checks.
 
 ## License
