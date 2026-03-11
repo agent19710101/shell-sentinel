@@ -103,7 +103,11 @@ Action validation helper:
 
 ## Roadmap
 
-- Rule tuning for additional shell execution forms and lower-noise heuristics.
+- `v0.8.0`: rule tuning + strict profile for CI/security pipelines.
+- `v0.9.0`: policy ergonomics + baseline workflow support.
+- `v0.10.0`: integration polish for CI/review tooling.
+
+Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)
 
 ## License
 
