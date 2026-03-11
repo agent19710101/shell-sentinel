@@ -248,14 +248,56 @@ func analyzeInput(input string, policy *sentinel.Policy, filePath string) ([]sen
 		findings []sentinel.Finding
 		lines    []int
 	)
-	for i, line := range strings.Split(input, "\n") {
-		lineFindings := sentinel.AnalyzeWithPolicy(line, policy)
-		for _, f := range lineFindings {
+	add := func(line int, fs []sentinel.Finding) {
+		for _, f := range fs {
 			findings = append(findings, f)
-			lines = append(lines, i+1)
+			lines = append(lines, line)
 		}
 	}
-	return findings, lines
+
+	fileLines := strings.Split(input, "\n")
+	for i, line := range fileLines {
+		add(i+1, sentinel.AnalyzeWithPolicy(line, policy))
+	}
+
+	for i := 0; i < len(fileLines); i++ {
+		for span := 2; span <= 3; span++ {
+			if i+span > len(fileLines) {
+				continue
+			}
+			window := strings.Join(fileLines[i:i+span], "\n")
+			if !strings.Contains(window, "$(\n") && !strings.Contains(window, "`\n") && !strings.Contains(window, "|\n") && !strings.Contains(window, "\n|") {
+				continue
+			}
+			for _, f := range sentinel.AnalyzeWithPolicy(window, policy) {
+				if f.Kind != "fetch-in-command-substitution" && f.Kind != "pipe-to-shell" {
+					continue
+				}
+				add(i+1, []sentinel.Finding{f})
+			}
+		}
+	}
+
+	return dedupeFindingsWithLines(findings, lines)
+}
+
+func dedupeFindingsWithLines(findings []sentinel.Finding, lines []int) ([]sentinel.Finding, []int) {
+	if len(findings) != len(lines) {
+		return findings, lines
+	}
+	seen := make(map[string]struct{}, len(findings))
+	outFindings := make([]sentinel.Finding, 0, len(findings))
+	outLines := make([]int, 0, len(lines))
+	for i, f := range findings {
+		key := fmt.Sprintf("%d|%s|%s|%s|%s", lines[i], f.Kind, f.Severity, f.Message, f.Evidence)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		outFindings = append(outFindings, f)
+		outLines = append(outLines, lines[i])
+	}
+	return outFindings, outLines
 }
 
 func rdSeverity(sev sentinel.Severity) string {

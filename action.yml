@@ -190,18 +190,10 @@ runs:
           echo "EOF"
         } >>"$GITHUB_OUTPUT"
 
-        # Emit workflow annotations for each finding.
-        while IFS=$'\t' read -r sev kind msg evidence source line; do
-          [[ -z "${sev}" ]] && continue
-          level="notice"
-          case "${sev}" in
-            high) level="error" ;;
-            warn) level="warning" ;;
-          esac
+        # Emit workflow annotations using rdjsonl diagnostics for precise file/line metadata.
+        while IFS=$'\t' read -r level kind msg source line; do
+          [[ -z "${level}" ]] && continue
           text="${msg}"
-          if [[ -n "${evidence}" && "${evidence}" != "null" ]]; then
-            text+=" (evidence: ${evidence})"
-          fi
           text="${text//'%'/'%25'}"
           text="${text//$'\n'/'%0A'}"
           text="${text//$'\r'/'%0D'}"
@@ -215,7 +207,16 @@ runs:
           else
             echo "::${level} title=shell-sentinel/${kind}::${text}"
           fi
-        done < <(jq -r '.findings[]? | [.severity, .kind, .message, (.evidence // ""), (.source // ""), (.line // "")] | @tsv' "${report_file}")
+        done < <(jq -r '
+          . as $d |
+          [
+            (if $d.severity == "ERROR" then "error" elif $d.severity == "WARNING" then "warning" else "notice" end),
+            ($d.code.value // "unknown"),
+            ($d.message // "shell-sentinel finding"),
+            ($d.location.path // ""),
+            (($d.location.range.start.line // "") | tostring)
+          ] | @tsv
+        ' "${rdjsonl_file}")
 
         if [[ ${overall_status} -eq 1 ]]; then
           echo "shell-sentinel findings reached fail-on=${{ inputs.fail-on }} threshold."

