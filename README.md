@@ -12,11 +12,11 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.9.0`
+Current release: `v0.9.1`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
-- configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning
+- configurable policy file support (`.shell-sentinel.yaml`) for allowlist/tuning with schema validation for unknown keys and invalid `ignore_kinds`
 - baseline file support (`--baseline`) to suppress accepted findings deterministically
 - baseline governance annotations for new entries (`--baseline-owner`, `--baseline-justification`, `--baseline-expiry`)
 - expiry-aware baseline application (expired entries no longer suppress findings)
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.9.0
+      - uses: agent19710101/shell-sentinel@v0.9.1
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -119,7 +119,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.9.0
+        uses: agent19710101/shell-sentinel@v0.9.1
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -132,6 +132,8 @@ Reviewdog integration example:
           fail_on_error: true
           rdjsonl: ${{ steps.shell.outputs.rdjsonl }}
 ```
+
+Baseline governance default for Action users: when `baseline` is set, entries are only consumed (not modified). Baseline metadata (`owner`, `justification`, `expiry`) is authored via CLI `--update-baseline` flows and then committed.
 
 Action validation helper:
 

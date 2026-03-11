@@ -51,6 +51,40 @@ func TestLoadPolicyParsesPolicyFile(t *testing.T) {
 	}
 }
 
+func TestLoadPolicyRejectsUnknownFields(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "policy.yaml")
+	content := []byte("allow_domains:\n  - example.com\nunknown_key: true\n")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	_, err := loadPolicy(path, false)
+	if err == nil {
+		t.Fatalf("expected unknown field validation error")
+	}
+	if !strings.Contains(err.Error(), "field unknown_key not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadPolicyRejectsUnknownIgnoreKinds(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "policy.yaml")
+	content := []byte("ignore_kinds:\n  - mixed-script\n  - not-a-real-kind\n")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	_, err := loadPolicy(path, false)
+	if err == nil {
+		t.Fatalf("expected invalid ignore_kinds validation error")
+	}
+	if !strings.Contains(err.Error(), "invalid ignore_kinds values") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRenderHookBash(t *testing.T) {
 	hook, err := renderHook("bash")
 	if err != nil {

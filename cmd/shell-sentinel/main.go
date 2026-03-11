@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -314,11 +315,42 @@ func loadPolicy(path string, disabled bool) (*sentinel.Policy, error) {
 		}
 		return nil, fmt.Errorf("read policy file %q: %w", path, err)
 	}
+
 	var policy sentinel.Policy
-	if err := yaml.Unmarshal(b, &policy); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	if err := dec.Decode(&policy); err != nil {
 		return nil, fmt.Errorf("parse policy file %q: %w", path, err)
 	}
+	if err := validatePolicy(policy); err != nil {
+		return nil, fmt.Errorf("validate policy file %q: %w", path, err)
+	}
 	return &policy, nil
+}
+
+func validatePolicy(policy sentinel.Policy) error {
+	allowedKinds := map[string]struct{}{
+		"ansi-escape":                   {},
+		"non-ascii-domain":              {},
+		"pipe-to-shell":                 {},
+		"fetch-in-command-substitution": {},
+		"mixed-script":                  {},
+	}
+	invalidKinds := make([]string, 0)
+	for _, k := range policy.IgnoreKinds {
+		kind := strings.TrimSpace(k)
+		if kind == "" {
+			continue
+		}
+		if _, ok := allowedKinds[kind]; !ok {
+			invalidKinds = append(invalidKinds, kind)
+		}
+	}
+	if len(invalidKinds) > 0 {
+		sort.Strings(invalidKinds)
+		return fmt.Errorf("invalid ignore_kinds values: %s (supported: ansi-escape, non-ascii-domain, pipe-to-shell, fetch-in-command-substitution, mixed-script)", strings.Join(invalidKinds, ", "))
+	}
+	return nil
 }
 
 func loadBaseline(path string) (*baselineFile, error) {
