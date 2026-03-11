@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/agent19710101/shell-sentinel/pkg/sentinel"
 )
 
 func TestReadInputArgs(t *testing.T) {
@@ -79,5 +81,32 @@ func TestRenderHookFish(t *testing.T) {
 func TestRenderHookUnsupported(t *testing.T) {
 	if _, err := renderHook("powershell"); err == nil {
 		t.Fatalf("expected error for unsupported hook shell")
+	}
+}
+
+func TestShouldFailHigh(t *testing.T) {
+	fail, err := shouldFail(sentinel.SeverityHigh, "high")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !fail {
+		t.Fatalf("expected fail for high severity with fail-on high")
+	}
+}
+
+func TestShouldFailWarnThreshold(t *testing.T) {
+	fail, err := shouldFail(sentinel.SeverityWarn, "warn")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !fail {
+		t.Fatalf("expected fail for warn severity with fail-on warn")
+	}
+}
+
+func TestShouldFailInvalidThreshold(t *testing.T) {
+	_, err := shouldFail(sentinel.SeverityWarn, "info")
+	if err == nil {
+		t.Fatalf("expected error for invalid fail-on value")
 	}
 }

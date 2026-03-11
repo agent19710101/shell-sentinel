@@ -1,0 +1,69 @@
+name: "shell-sentinel"
+description: "Scan shell snippets for risky patterns (homograph URLs, pipe-to-shell, ANSI injection)."
+author: "agent19710101"
+branding:
+  icon: "shield"
+  color: "yellow"
+inputs:
+  input:
+    description: "Shell payload text to scan"
+    required: true
+  fail-on:
+    description: "Fail threshold: warn|high"
+    required: false
+    default: "high"
+  policy:
+    description: "Optional .shell-sentinel.yaml path"
+    required: false
+  version:
+    description: "Version to install (e.g. v0.6.0 or latest)"
+    required: false
+    default: "latest"
+outputs:
+  report:
+    description: "JSON scan report"
+runs:
+  using: "composite"
+  steps:
+    - name: Install shell-sentinel
+      shell: bash
+      run: |
+        set -euo pipefail
+        go install "github.com/agent19710101/shell-sentinel@${{ inputs.version }}"
+
+    - name: Scan payload
+      id: scan
+      shell: bash
+      run: |
+        set -euo pipefail
+        policy_args=()
+        if [[ -n "${{ inputs.policy }}" ]]; then
+          policy_args+=(--policy "${{ inputs.policy }}")
+        fi
+
+        bin_path="$(go env GOPATH)/bin/shell-sentinel"
+        report_file="$(mktemp)"
+        set +e
+        "${bin_path}" --json --fail-on "${{ inputs.fail-on }}" "${policy_args[@]}" "${{ inputs.input }}" >"${report_file}"
+        status=$?
+        set -e
+
+        {
+          echo "report<<EOF"
+          cat "${report_file}"
+          echo "EOF"
+        } >>"$GITHUB_OUTPUT"
+
+        if [[ $status -eq 1 ]]; then
+          echo "High-risk findings detected by shell-sentinel."
+          cat "${report_file}"
+          exit 1
+        fi
+
+        if [[ $status -eq 2 ]]; then
+          echo "shell-sentinel usage/configuration error."
+          cat "${report_file}" || true
+          exit 2
+        fi
+
+        echo "shell-sentinel scan passed."

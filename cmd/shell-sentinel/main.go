@@ -24,6 +24,7 @@ func main() {
 	fromStdin := flag.Bool("stdin", false, "read payload from stdin")
 	policyPath := flag.String("policy", ".shell-sentinel.yaml", "path to policy file")
 	noPolicy := flag.Bool("no-policy", false, "disable policy file loading")
+	failOn := flag.String("fail-on", "high", "exit non-zero for findings at or above this severity: warn|high")
 	hookShell := flag.String("hook", "", "print shell hook snippet (supported: bash, zsh, fish)")
 	flag.Parse()
 
@@ -61,8 +62,24 @@ func main() {
 		printHuman(r)
 	}
 
-	if sev == sentinel.SeverityHigh {
+	fail, err := shouldFail(sev, *failOn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+	if fail {
 		os.Exit(1)
+	}
+}
+
+func shouldFail(sev sentinel.Severity, failOn string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(failOn)) {
+	case "high", "":
+		return sev == sentinel.SeverityHigh, nil
+	case "warn":
+		return sev == sentinel.SeverityHigh || sev == sentinel.SeverityWarn, nil
+	default:
+		return false, fmt.Errorf("invalid --fail-on value %q (supported: warn, high)", failOn)
 	}
 }
 
