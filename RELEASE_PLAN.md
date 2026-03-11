@@ -3,40 +3,44 @@
 ## Goal
 Ship a reliable `v0.x` line that is easy to adopt in local shells and CI, with clear output contracts for automation.
 
-## v0.8.0 — Rule tuning + baseline + CI formatter (shipped)
+## Delivered foundation (v0.8.0 → v0.10.3)
 
-Delivered:
-- Expanded fetch-execution detection to cover additional shell forms (`exec`, `env VAR=...`, `-lc`) with constrained matching.
-- Added baseline file support for accepted findings (`--baseline`, `--update-baseline`) with deterministic signatures.
-- Added reviewdog formatter output (`--rdjsonl`) and action output wiring.
+Shipped:
+- Rule-coverage expansion for shell execution forms and encoded payload chains.
+- Deterministic baseline workflows with governance metadata and expiry handling.
+- Stable machine-readable outputs (`--json`, `--sarif`, `--rdjsonl`) with contract tests.
+- File-aware scanning and improved GitHub Action ergonomics for input/file/files modes.
+- CI/release hardening and action validation coverage.
 
-## v0.9.0 — Baseline governance + policy diagnostics (shipped in v0.9.1)
+## v0.11.0 — Decoder-chain depth
 
-Delivered:
-- Added baseline entry annotations (owner, justification, expiry) for `--update-baseline`.
-- Added expiry-aware baseline filtering (expired entries no longer suppress findings).
-- Added machine-readable summary stats in JSON output (`stats.total/high/warn/info`).
-- Added policy schema validation with clearer error diagnostics (unknown fields + invalid `ignore_kinds`).
-- Updated Action examples/docs for baseline governance defaults.
-
-## v0.10.0 — File-aware scanning and integration polish (shipped)
-
-Delivered:
-- ✅ Added optional file-aware scanning mode (`--file`) for direct line mapping (`--rdjsonl`).
-- ✅ Improved GitHub Action inputs for repo-wide scanning scenarios with explicit modes (`input`, `file`, `files`).
-- ✅ Published migration notes (`MIGRATION.md`) and hardened release checklist (`RELEASE_CHECKLIST.md`).
+Scope:
+- Add high-severity detection for gzip/xz decode-and-exec chains (for example: `... | gzip -d | sh`, `... | xz -d | bash`).
+- Keep severity/rule IDs stable and documented in output contracts.
+- Add focused regression tests for safe vs risky decode cases.
 
 Exit criteria:
-- ✅ CI integration guide covers at least 2 common workflows.
-- ✅ Action behavior verified end-to-end in CI via `scripts/validate-action.sh` and action docs/examples.
-- ✅ Release checklist is documented and repeatable.
+- New decoder rules covered by unit tests and file-mode line mapping tests.
+- README examples include at least one gzip/xz detection case.
 
-## v0.10.x follow-up hardening (in progress)
+## v0.12.0 — Script-aware precision
 
-Delivered:
-- ✅ Added multiline file-mode detection for split fetch execution patterns and improved action diagnostics (`v0.10.1`).
-- ✅ Added heredoc shell-execution detection for remote fetch payloads with file-mode line mapping (`v0.10.2`).
-- ✅ Added decoded payload pipe-to-shell detection for base64/openssl decode chains (`v0.10.3`).
+Scope:
+- Add optional script parsing mode for `--file` scans to improve multiline/control-flow precision.
+- Reduce false positives from regex-only matching on benign heredoc/variable patterns.
+- Preserve existing default behavior unless parser mode is explicitly enabled.
 
-Next:
-- Expand obfuscated fetch-pipeline coverage for additional decoder families beyond base64.
+Exit criteria:
+- Parser mode is opt-in and documented.
+- Contract tests demonstrate unchanged default output shape.
+
+## v0.13.0 — Team policy profiles
+
+Scope:
+- Add policy profile presets (`strict`, `balanced`, `legacy`) for faster organizational rollout.
+- Allow profile + local policy override merging with deterministic precedence.
+- Document migration guidance for existing `.shell-sentinel.yaml` users.
+
+Exit criteria:
+- Profile selection/merge behavior covered by tests.
+- README + migration notes include profile adoption guidance.

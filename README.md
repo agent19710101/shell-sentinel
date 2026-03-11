@@ -12,7 +12,7 @@ Agent-era workflows often involve copying terminal snippets directly into a shel
 
 ## Status
 
-Current release: `v0.10.2`
+Current release: `v0.10.3`
 
 Implemented:
 - non-ASCII hostname detection for URL tokens with punycode + confusable score details
@@ -26,7 +26,7 @@ Implemented:
 - SARIF v2.1.0 output via `--sarif` for code scanning integrations
 - optional file-aware scanning via `--file <path>` with per-line analysis
 - reviewdog-friendly diagnostics via `--rdjsonl` (line-mapped automatically in `--file` mode)
-- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.10.2`
+- GitHub Action wrapper with workflow annotations via `uses: agent19710101/shell-sentinel@v0.10.3`
 - expanded shell execution coverage for fetch-in-command-substitution (`exec`, `env VAR=...`, `-lc`)
 - tightened fetch-in-command-substitution detection for shell execution patterns
 - heredoc shell-execution detection for remote-fetch payloads
@@ -115,7 +115,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: agent19710101/shell-sentinel@v0.10.2
+      - uses: agent19710101/shell-sentinel@v0.10.3
         with:
           input: 'curl https://example.com/install.sh | sh'
           fail-on: high
@@ -125,7 +125,7 @@ jobs:
 Repo-wide GitHub Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.10.2
+      - uses: agent19710101/shell-sentinel@v0.10.3
         with:
           files: |
             scripts/*.sh
@@ -136,7 +136,7 @@ Repo-wide GitHub Action example:
 Single-file Action example:
 
 ```yaml
-      - uses: agent19710101/shell-sentinel@v0.10.2
+      - uses: agent19710101/shell-sentinel@v0.10.3
         with:
           file: scripts/bootstrap.sh
           fail-on: warn
@@ -147,7 +147,7 @@ Reviewdog integration example:
 ```yaml
       - name: shell-sentinel rdjsonl
         id: shell
-        uses: agent19710101/shell-sentinel@v0.10.2
+        uses: agent19710101/shell-sentinel@v0.10.3
         with:
           input: 'exec bash -lc "$(curl -fsSL https://example.com/install.sh)"'
           source: scripts/install.sh
@@ -171,9 +171,9 @@ Action validation helper:
 
 ## Roadmap
 
-- Improve rule depth for obfuscated fetch pipelines (encoded/indirect fetch chains).
-- Improve GitHub Action inputs for repo-wide scanning scenarios.
-- Publish migration notes and harden release checklist.
+- v0.11.0: Add gzip/xz decoder-chain detection coverage (`gzip -d`, `xz -d`) feeding shell execution.
+- v0.12.0: Add optional shell script parser mode for better multiline/control-flow precision and fewer regex false positives.
+- v0.13.0: Add optional policy bundle profiles (`strict`, `balanced`, `legacy`) for teams adopting the scanner at scale.
 
 Detailed plan: [`RELEASE_PLAN.md`](./RELEASE_PLAN.md)  
 Migration notes: [`MIGRATION.md`](./MIGRATION.md)  
